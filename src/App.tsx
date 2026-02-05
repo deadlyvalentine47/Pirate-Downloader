@@ -28,7 +28,15 @@ function App() {
     const unlisten = listen<number>("download-progress", (event) => {
       setProgress(event.payload);
     });
-    return () => { unlisten.then(f => f()); };
+
+    const unlistenStart = listen<number>("download-start", (event) => {
+      setTotalSize(event.payload);
+    });
+
+    return () => {
+      unlisten.then(f => f());
+      unlistenStart.then(f => f());
+    };
   }, []);
 
   // Save History Helper
@@ -54,9 +62,10 @@ function App() {
       setStatus("Checking URL...");
       try {
         // Ask Rust for details
+        // Fix: Tell TS this returns [name, size]
         const [name, size] = await invoke<[string, number]>("get_file_details", { url });
-        defaultJavaName = name as string;
-        detectedSize = size as number;
+        defaultJavaName = name;
+        detectedSize = size;
         setTotalSize(detectedSize);
         setStatus("Detected: " + name);
       } catch (e) {
@@ -84,6 +93,7 @@ function App() {
     }
     setStatus("Downloading...");
     try {
+      // Fix: Removed 'msg' variable since we don't use it
       await invoke("download_file", {
         url: url,
         filepath: savePath,
