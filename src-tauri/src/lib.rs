@@ -1,4 +1,5 @@
 // Module declarations
+mod commands;
 mod core;
 mod network;
 mod utils;
@@ -7,7 +8,7 @@ mod utils;
 use reqwest::header::RANGE;
 use std::io::SeekFrom;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tauri::Emitter;
 use tokio::io::AsyncSeekExt;
@@ -21,85 +22,78 @@ use core::types;
 use network::{client, headers};
 use utils::{filesystem, logger};
 
-#[tauri::command]
-async fn download_file(
+/// Core download loop - shared by new downloads and resumes
+pub async fn run_download_task(
     app: tauri::AppHandle,
-    url: String,
-    filepath: String,
-    threads: u64,
+    download_id: String,
+    metadata: core::state::DownloadMetadata,
+    control: Arc<commands::DownloadControl>,
+    manager: commands::DownloadManager,
+    generation: u32,
 ) -> Result<String, DownloadError> {
-    let client = client::create_client()?;
+    let url = metadata.url.clone();
+    let filepath = metadata.filepath.clone();
+    let total_size = metadata.total_size;
+    let actual_threads = metadata.thread_count as usize;
 
-    // 1. Get Size
-    let response = client.get(&url).send().await?;
-    let total_size = response.content_length().unwrap_or(0);
-    if total_size < 1 {
-        return Err(DownloadError::Config("File has no size!".to_string()));
-    }
-    // CRITICAL: Tell Frontend the size immediately (Fixes 0GB bug)
-    let _ = app.emit("download-start", total_size);
-    info!(
-        url = %url,
-        size_bytes = total_size,
-        size_mb = total_size / 1024 / 1024,
-        "Starting download"
-    );
-    let start_time = std::time::Instant::now();
-
-    // 2. Allocator (Sparse File)
-    let path = PathBuf::from(&filepath);
-    filesystem::allocate_sparse_file(&path, total_size)?;
-
-    // 3. Dynamic Chunking (Tiered Optimization)
-    let chunk_size = filesystem::calculate_chunk_size(total_size);
+    let chunk_size = utils::filesystem::calculate_chunk_size(total_size);
     let total_chunks = (total_size + chunk_size - 1) / chunk_size;
-    // Robust Queue: If a chunk fails, it goes back here.
-    let mut chunks_vec = Vec::new();
-    for i in 0..total_chunks {
-        chunks_vec.push(i);
-    }
+
+    // Use shared control structures
+    let downloaded_bytes = control.downloaded_bytes.clone();
+    let completed_chunks = control.completed_chunks.clone();
+
+    // Initialize queue from incomplete chunks
+    // Crucial for resume support
     let chunk_queue = Arc::new(tokio::sync::Mutex::new(std::collections::VecDeque::from(
-        chunks_vec,
+        metadata.incomplete_chunks.clone(),
     )));
-    // Track how many times each chunk has been attempted (to relax speed limits for struggling chunks)
+
+    // Track retries
     let chunk_retry_counts = Arc::new(tokio::sync::Mutex::new(
         std::collections::HashMap::<u64, u32>::new(),
     ));
 
-    let completed_chunks = Arc::new(AtomicU64::new(0)); // Track successful completions
-    let downloaded_bytes = Arc::new(AtomicU64::new(0));
-    // Speed tracking (Current, Peak, Min, StartTime)
+    // Speed stats
     let speed_stats = Arc::new(tokio::sync::Mutex::new((
         0u64,
         0.0f64,
         f64::MAX,
         std::time::Instant::now(),
     )));
-    let actual_threads = if threads > 0 {
-        threads
-    } else {
-        types::DEFAULT_THREADS
-    };
-    let mut handles = vec![];
+
     info!(
+        download_id = %download_id,
         threads = actual_threads,
         chunk_size_mb = chunk_size / 1024 / 1024,
-        total_chunks = total_chunks,
+        remaining_chunks = metadata.incomplete_chunks.len(),
         "Starting download workers"
     );
+
+    let start_time = std::time::Instant::now();
+    let mut handles = vec![];
+
     for _ in 0..actual_threads {
         let url = url.clone();
-        let path = path.clone();
+        let path = filepath.clone();
         let app_handle = app.clone();
         let queue = chunk_queue.clone();
         let retry_counts = chunk_retry_counts.clone();
-        let completed = completed_chunks.clone();
-        let downloaded_counter = downloaded_bytes.clone();
         let _stats_monitor = speed_stats.clone();
-        let handle = tokio::spawn(async move {
-            let client = client::create_worker_client();
+        let control = control.clone();
+        let worker_downloaded = downloaded_bytes.clone();
+        let worker_completed = completed_chunks.clone();
 
-            let file = match tokio::fs::OpenOptions::new().write(true).open(&path).await {
+        let handle = tokio::spawn(async move {
+            // Worker implementation
+            let client = client::create_worker_client();
+            let path_buf = PathBuf::from(path);
+
+            let file = match tokio::fs::OpenOptions::new()
+                .write(true)
+                .open(&path_buf)
+                .await
+            {
                 Ok(f) => f,
                 Err(e) => {
                     error!(error = %e, "Failed to open file for writing");
@@ -107,27 +101,33 @@ async fn download_file(
                 }
             };
             let mut writer = tokio::io::BufWriter::with_capacity(128 * 1024, file);
+
             loop {
-                // Check if all chunks are done
-                let current_completed = completed.load(Ordering::Relaxed);
-                if current_completed >= total_chunks {
+                // 1. Check Signals
+                let signal = control.signal.load(Ordering::Relaxed);
+                if signal != 0 {
+                    debug!("Worker received signal {}, exiting", signal);
                     break;
                 }
 
-                // Get Job
+                // 2. Get Job
                 let idx_opt = {
                     let mut q = queue.lock().await;
                     q.pop_front()
                 };
 
                 if idx_opt.is_none() {
-                    // Queue empty but not all chunks done - wait and retry
+                    // Check if actually done
+                    let completed_count = worker_completed.lock().await.len() as u64;
+                    if completed_count >= total_chunks {
+                        break;
+                    }
                     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                     continue;
                 }
                 let idx = idx_opt.unwrap();
 
-                // Check retry count for this chunk
+                // Check retry count
                 let retry_count = {
                     let mut counts = retry_counts.lock().await;
                     let count = counts.entry(idx).or_insert(0);
@@ -135,7 +135,7 @@ async fn download_file(
                     *count
                 };
 
-                // Disable speed enforcer for chunks that have been retried 3+ times
+                // Speed limit for struggling chunks
                 let enforce_speed = retry_count < types::ADAPTIVE_RETRY_THRESHOLD;
                 if retry_count > 1 {
                     warn!(
@@ -153,9 +153,20 @@ async fn download_file(
                 let range_header = format!("bytes={}-{}", start, end);
                 let mut success = false;
                 let mut attempts = 0;
+
                 while attempts < types::CHUNK_RETRY_LIMIT && !success {
-                    // 5 Retries per grab
                     attempts += 1;
+                    // Check signal again inside retry loop
+                    if control.signal.load(Ordering::Relaxed) != 0 {
+                        break;
+                    }
+
+                    // CRITICAL: Check generation to kill zombie tasks
+                    if control.generation.load(Ordering::Relaxed) != generation {
+                        debug!("Worker generation mismatch, exiting");
+                        break;
+                    }
+
                     if let Ok(mut response) = client
                         .get(&url)
                         .header(RANGE, range_header.clone())
@@ -167,97 +178,132 @@ async fn download_file(
                                 let mut chunk_ok = true;
                                 let mut bytes_this_attempt = 0u64;
                                 let attempt_start = std::time::Instant::now();
+
                                 while let Some(chunk) = response.chunk().await.unwrap_or(None) {
-                                    // SPEED ENFORCEMENT: > 300KB/s (but only for fresh chunks)
+                                    // CRITICAL: Check signal inside streaming loop
+                                    if control.signal.load(Ordering::Relaxed) != 0 {
+                                        chunk_ok = false;
+                                        break;
+                                    }
+
+                                    // Speed enforcement logic
                                     if enforce_speed {
                                         let elapsed = attempt_start.elapsed().as_secs_f64();
                                         if elapsed > types::SPEED_ENFORCEMENT_DELAY {
                                             let speed =
                                                 (bytes_this_attempt as f64 / 1024.0) / elapsed;
                                             if speed < types::SPEED_ENFORCEMENT_THRESHOLD {
-                                                // Too slow? Kill it.
                                                 chunk_ok = false;
                                                 break;
                                             }
                                         }
                                     }
+
                                     if writer.write_all(&chunk).await.is_err() {
                                         chunk_ok = false;
                                         break;
                                     }
-
                                     bytes_this_attempt += chunk.len() as u64;
-
-                                    // Note: We don't count bytes here anymore - only on successful completion
-                                    // This prevents double-counting on retries
                                 }
 
-                                // Verify we downloaded the FULL chunk
                                 let expected_bytes = (end - start + 1) as u64;
                                 if chunk_ok && bytes_this_attempt == expected_bytes {
                                     success = true;
 
-                                    // Only count bytes when chunk is FULLY complete (prevents double-counting)
-                                    let old = downloaded_counter
+                                    // Update shared state
+                                    let old_bytes = worker_downloaded
                                         .fetch_add(expected_bytes, Ordering::Relaxed);
-                                    let new = old + expected_bytes;
+                                    let new_bytes = old_bytes + expected_bytes;
 
-                                    let new_completed =
-                                        completed.fetch_add(1, Ordering::Relaxed) + 1;
+                                    worker_completed.lock().await.push(idx);
+                                    let completed_count = worker_completed.lock().await.len();
 
                                     debug!(
                                         chunk_id = idx,
-                                        completed = new_completed,
+                                        completed = completed_count,
                                         total = total_chunks,
-                                        mb_total = new / 1048576,
+                                        mb_total = new_bytes / 1048576,
                                         "Chunk complete"
                                     );
 
-                                    // Emit progress update
-                                    let _ = app_handle.emit("download-progress", new);
-                                } else if chunk_ok {
-                                    // Partial download - not actually complete!
-                                    warn!(
-                                        chunk_id = idx,
-                                        downloaded = bytes_this_attempt,
-                                        expected = expected_bytes,
-                                        "Chunk incomplete - forcing retry"
-                                    );
-                                    chunk_ok = false; // Force retry
+                                    let _ = app_handle.emit("download-progress", new_bytes);
                                 }
                             }
                         }
                     }
+
                     if !success {
+                        // CRITICAL: Check signal before sleeping
+                        if control.signal.load(Ordering::Relaxed) != 0 {
+                            break;
+                        }
                         tokio::time::sleep(std::time::Duration::from_millis(200 * attempts)).await;
                     }
-                }
+                } // End retry loop
+
                 if !success {
-                    // CRITICAL: Push back to queue to be retried by ANY thread
-                    error!(
-                        chunk_id = idx,
-                        attempts = types::CHUNK_RETRY_LIMIT,
-                        "Chunk failed after max attempts - pushing back to queue"
-                    );
-                    let mut q = queue.lock().await;
-                    q.push_back(idx);
+                    // Push back to queue
+                    if control.signal.load(Ordering::Relaxed) == 0 {
+                        error!(chunk_id = idx, "Chunk failed after max attempts");
+                        let mut q = queue.lock().await;
+                        q.push_back(idx);
+                    }
                 }
-            }
-            if let Err(e) = writer.flush().await {
-                error!(error = %e, "Failed to flush writer");
-            }
+            } // End main loop
+
+            let _ = writer.flush().await;
         });
         handles.push(handle);
     }
+
+    // Spawn Monitor Task to Sync Manager State
+    let monitor_manager = manager.clone();
+    let monitor_id = download_id.clone();
+    let monitor_control = control.clone();
+    let monitor_handle = tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+            if monitor_control.signal.load(Ordering::Relaxed) != 0 {
+                break;
+            }
+            // Sync progress
+            let bytes = monitor_control.downloaded_bytes.load(Ordering::Relaxed);
+            if let Some(mut meta) = monitor_manager.get_download(&monitor_id).await {
+                meta.downloaded_bytes = bytes;
+                // We don't sync completed_chunks vector constantly to avoid lock contention
+                // But we should sync it on pause/stop in control logic
+                monitor_manager.update_download(&monitor_id, meta).await;
+            }
+        }
+    });
+
+    // Wait for workers
     for handle in handles {
         handle
             .await
             .map_err(|e| DownloadError::TaskJoin(e.to_string()))?;
     }
+
+    // CRITICAL: Check if we finished due to a signal (Pause/Stop/Cancel)
+    // If signaled, we MUST NOT run completion logic
+    let final_signal = control.signal.load(Ordering::Relaxed);
+    if final_signal != 0 {
+        info!("Download task finished due to signal: {}", final_signal);
+        return Ok(download_id);
+    }
+    monitor_handle.abort();
+
+    // Check final status
+    let signal = control.signal.load(Ordering::Relaxed);
+    if signal != 0 {
+        // Stopped/Paused/Cancelled
+        return Ok(download_id);
+    }
+
+    // If we are here, we should be done. Verify.
     let elapsed = start_time.elapsed();
     let avg_speed = (total_size as f64 / 1024.0 / 1024.0) / elapsed.as_secs_f64();
-
-    let (peak_speed, min_speed) = {
+    let (_peak_speed, _min_speed) = {
         let monitor = speed_stats.lock().await;
         let (_, peak, min, _) = *monitor;
         (peak, if min == f64::MAX { 0.0 } else { min })
@@ -266,19 +312,117 @@ async fn download_file(
     info!(
         duration_secs = elapsed.as_secs_f64(),
         avg_speed_mbps = avg_speed,
-        peak_speed_mbps = peak_speed,
-        min_speed_mbps = min_speed,
         "Download complete"
     );
 
-    // INTEGRITY CHECK
+    // Integrity Check
     let final_bytes = downloaded_bytes.load(Ordering::SeqCst);
-    let final_completed = completed_chunks.load(Ordering::SeqCst);
+    let final_completed_count = completed_chunks.lock().await.len() as u64;
 
-    integrity::verify_download(final_bytes, total_size, final_completed, total_chunks)?;
+    integrity::verify_download(final_bytes, total_size, final_completed_count, total_chunks)?;
 
     let _ = app.emit("download-progress", total_size);
-    Ok(format!("Done!"))
+
+    // Mark complete in manager
+    if let Some(mut meta) = manager.get_download(&download_id).await {
+        meta.complete();
+        meta.downloaded_bytes = total_size;
+
+        // Emit completion event
+        let _ = app.emit("download-state", "completed");
+
+        // Populate completed chunks fully for correctness
+        // meta.completed_chunks = ...
+
+        manager.update_download(&download_id, meta).await;
+    }
+
+    // Remove from manager?
+    // Wait, if we remove it, we lose history?
+    // User might want to see history.
+    // Logic said "Cleanup: Remove download from manager".
+    // If we keep history, we should keep it.
+    // For now, keep inconsistent logic: remove from manager (active downloads), but maybe persistent state remains?
+    manager.remove_download(&download_id).await;
+    info!(download_id = %download_id, "Download completed and removed from manager");
+
+    Ok(download_id)
+}
+
+#[tauri::command]
+async fn download_file(
+    app: tauri::AppHandle,
+    url: String,
+    filepath: String,
+    threads: u64,
+    manager: tauri::State<'_, commands::DownloadManager>,
+) -> Result<String, DownloadError> {
+    // Generate unique download ID
+    let download_id = uuid::Uuid::new_v4().to_string();
+    let download_control = Arc::new(commands::DownloadControl::new());
+    let client = client::create_client()?;
+
+    // 1. Get Size
+    let response = client.get(&url).send().await?;
+    let total_size = response.content_length().unwrap_or(0);
+    if total_size < 1 {
+        return Err(DownloadError::Config("File has no size!".to_string()));
+    }
+
+    // CRITICAL: Tell Frontend the size AND download ID immediately
+    let _ = app.emit("download-start", total_size);
+    let _ = app.emit("download-id", download_id.clone());
+
+    info!(download_id = %download_id, size_mb = total_size / (1024 * 1024), "Starting download");
+
+    // 2. Allocator
+    let path = PathBuf::from(&filepath);
+    filesystem::allocate_sparse_file(&path, total_size)?;
+
+    // 3. Register
+    let actual_threads = if threads > 0 {
+        threads
+    } else {
+        types::DEFAULT_THREADS
+    } as u32;
+    let chunk_size = filesystem::calculate_chunk_size(total_size);
+    let total_chunks = (total_size + chunk_size - 1) / chunk_size;
+
+    let metadata = core::state::DownloadMetadata {
+        url: url.clone(),
+        filepath: filepath.clone(),
+        total_size,
+        downloaded_bytes: 0,
+        state: core::state::DownloadState::Active,
+        thread_count: actual_threads,
+        completed_chunks: vec![],
+        incomplete_chunks: (0..total_chunks).collect(),
+        created_at: chrono::Utc::now(),
+        paused_at: None,
+        resumed_at: None,
+        stopped_at: None,
+        completed_at: None,
+        error_message: None,
+    };
+
+    manager
+        .register_download(
+            download_id.clone(),
+            metadata.clone(),
+            download_control.clone(),
+        )
+        .await;
+
+    // 4. Run Loop
+    run_download_task(
+        app,
+        download_id,
+        metadata,
+        download_control,
+        (*manager).clone(),
+        0,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -320,10 +464,21 @@ pub fn run() {
         eprintln!("Failed to initialize logger: {}", e);
     }
 
+    // Initialize download manager
+    let download_manager = commands::DownloadManager::new();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![download_file, get_file_details])
+        .manage(download_manager)
+        .invoke_handler(tauri::generate_handler![
+            download_file,
+            get_file_details,
+            commands::download_control::pause_download,
+            commands::download_control::resume_download,
+            commands::download_control::stop_download,
+            commands::download_control::cancel_download,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

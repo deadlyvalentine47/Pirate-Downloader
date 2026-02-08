@@ -26,9 +26,18 @@ pub enum DownloadError {
     /// Task join errors (thread/async task failures)
     #[error("Task join error: {0}")]
     TaskJoin(String),
+
+    /// Serialization/deserialization errors (JSON, state files)
+    #[error("Serialization error: {0}")]
+    Serialization(String),
+
+    /// State file not found (resume attempted but no state exists)
+    #[error("State file not found for: {0}")]
+    StateNotFound(String),
 }
 
 /// Helper trait to add context to errors
+#[allow(dead_code)]
 pub trait ErrorContext<T> {
     fn context(self, msg: &str) -> Result<T, DownloadError>;
 }

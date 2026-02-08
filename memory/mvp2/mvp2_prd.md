@@ -395,21 +395,91 @@ Before starting MVP2 feature development:
 
 ### 🎯 Priority 1: Essential Features (Must Have)
 
-#### 1. **Pause/Resume Downloads**
-**Problem**: Users need to stop downloads and continue later without losing progress  
-**Solution**: Save download state to disk, resume from exact byte position
+#### 1. **Download Control: Pause/Resume/Stop/Cancel**
+**Problem**: Users need flexible control over downloads with different stopping behaviors  
+**Solution**: Four distinct control operations with clear state management
+
+**Control Operations**:
+
+1. **Pause** 🟡
+   - **Behavior**: Temporarily halt download, preserve all state
+   - **State**: Download remains in queue as "paused"
+   - **Data**: All progress saved, chunks preserved
+   - **Resume**: Continue from exact byte position
+   - **Use Case**: Temporarily free bandwidth, continue later
+
+2. **Resume** ▶️
+   - **Behavior**: Continue paused download from last position
+   - **State**: Change from "paused" to "active"
+   - **Data**: Load saved state, rebuild incomplete chunk queue
+   - **Use Case**: Resume after pause or app restart
+
+3. **Stop** ⏹️
+   - **Behavior**: Gracefully stop download, save final state
+   - **State**: Move to "stopped" (can resume later)
+   - **Data**: Save all progress, keep partial file
+   - **File**: Partial file remains on disk with `.part` extension
+   - **Use Case**: Stop for now, may resume in future
+
+4. **Cancel** ❌
+   - **Behavior**: Immediately terminate download, cleanup everything
+   - **State**: Remove from queue entirely (works from **any state**: active, paused, stopped, failed)
+   - **Data**: Delete all state files and partial downloads
+   - **File**: Delete `.part` file from disk
+   - **Use Case**: Don't want this file anymore, free up space
+   - **Note**: Available as an option for all downloads regardless of current state
 
 **Technical Requirements**:
-- Save completed chunk list to JSON file
-- Store metadata (URL, filepath, total size, completed bytes)
-- Resume by rebuilding queue with only incomplete chunks
-- UI: Pause/Resume buttons per download
+- **State Persistence**:
+  - Save completed chunk list to JSON file
+  - Store metadata (URL, filepath, total size, completed bytes, thread count)
+  - Track download status (active, paused, stopped, completed, failed, cancelled)
+  - Timestamp for pause/stop/resume events
+
+- **Resume Logic**:
+  - Load saved state from disk
+  - Verify partial file exists and matches expected size
+  - Rebuild chunk queue with only incomplete chunks
+  - Resume with same thread count as original download
+
+- **File Management**:
+  - Paused/Stopped: Keep `.part` file
+  - Cancelled: Delete `.part` file and state JSON
+  - Completed: Rename `.part` to final filename
+
+- **UI Controls**:
+  - **Active Download**: Show Pause, Stop, Cancel buttons
+  - **Paused Download**: Show Resume, Cancel buttons
+  - **Stopped Download**: Show Resume, Cancel buttons
+  - **Failed Download**: Show Retry, Cancel buttons
+  - **Cancel button**: Always available regardless of state
+  - Confirmation dialog for Cancel (destructive action)
+
+**State Transitions**:
+```
+                    ┌─────────────┐
+                    │   CANCEL    │ ← Can cancel from ANY state
+                    └─────────────┘
+                           ↑
+        ┌──────────────────┼──────────────────┐
+        │                  │                  │
+pending → active → paused ─┘    completed     │
+              ↓       ↓                       │
+            stopped  failed ───────────────────┘
+              ↓
+            resumed → active
+```
 
 **Acceptance Criteria**:
-- ✅ Can pause mid-download
-- ✅ Can resume after app restart
-- ✅ No data loss or re-downloading completed chunks
+- ✅ Can pause mid-download without data loss
+- ✅ Can resume paused download from exact position
+- ✅ Can stop download and resume later (even after app restart)
+- ✅ Can cancel download with full cleanup (file + state deleted)
+- ✅ No re-downloading of completed chunks on resume
 - ✅ Progress bar shows correct percentage on resume
+- ✅ Confirmation dialog before cancel
+- ✅ Stopped downloads persist across app restarts
+- ✅ UI clearly shows current state (active/paused/stopped)
 
 ---
 

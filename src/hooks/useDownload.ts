@@ -53,16 +53,21 @@ export const useDownload = () => {
 
         setStatus('Downloading...');
         try {
+            // Backend emits download-id event and returns ID when complete
             await invoke('download_file', {
                 url: url,
                 filepath: savePath,
                 threads: Number(threads)
             });
+
+            // Trigger history update (but do not force 'completed' state here)
+            // State updates come from backend events
             setStatus('Finished');
             addItem(url, savePath, totalSize, 'Success');
         } catch (e) {
             setStatus('Error: ' + e);
             addItem(url, savePath, 0, 'Failed');
+            useDownloadStore.getState().setDownloadState('failed');
         }
     };
 
