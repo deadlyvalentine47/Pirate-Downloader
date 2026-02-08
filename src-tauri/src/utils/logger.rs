@@ -83,6 +83,7 @@ fn get_log_directory() -> Result<std::path::PathBuf, Box<dyn std::error::Error>>
 }
 
 /// Get the current log file path (for debugging/testing)
+#[allow(dead_code)]
 pub fn get_current_log_file() -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
     let log_dir = get_log_directory()?;
     let today = chrono::Local::now().format("%Y-%m-%d");

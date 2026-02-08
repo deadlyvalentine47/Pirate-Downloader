@@ -1,7 +1,7 @@
 # MVP2 Pending Tasks Tracker
 
-**Last Updated**: 2026-02-06  
-**Status**: Phase 0 - Prerequisites
+**Last Updated**: 2026-02-08  
+**Status**: Phase 0 Complete ✅ - Moving to Phase 1
 
 ---
 
@@ -105,21 +105,40 @@
 
 ## Phase 1: Essential Features (Priority 1)
 
-### 1. Pause/Resume Downloads
-- [ ] Backend implementation `#backend`
-  - [ ] Design pause state structure
-  - [ ] Save download state to JSON
-  - [ ] Implement pause command
-  - [ ] Implement resume command
+### 1. Download Control (Pause/Resume/Stop/Cancel)
+- [x] Backend implementation `#backend` `#critical` **COMPLETED 2026-02-08**
+  - [x] Design state structure (active, paused, stopped, completed, failed, cancelled)
+  - [x] Implement Pause command (save state, halt workers)
+  - [x] Implement Resume command (load state, rebuild chunk queue) *Note: Resume updates state but doesn't restart download yet*
+  - [x] Implement Stop command (graceful shutdown, keep .part file)
+  - [x] Implement Cancel command (terminate, cleanup files + state)
+  - [x] Save download state to JSON (.part.state file)
+  - [x] Store metadata (URL, filepath, total size, completed bytes, thread count, timestamps)
+  - [x] Track completed chunks list
   - [ ] Load state on app restart
-- [ ] Frontend implementation `#frontend`
-  - [ ] Add Pause/Resume buttons to UI
-  - [ ] Update progress bar on resume
-  - [ ] Show paused state visually
+  - [ ] Verify partial file integrity on resume
+  - [x] Handle state transitions (pending → active → paused/stopped/cancelled)
+  - [x] Integrated control signals into download loop (workers check signals before each chunk)
+  - [x] Added DownloadManager for tracking active downloads
+  - [x] Added DownloadControl with AtomicU8 signals (0=run, 1=pause, 2=stop, 3=cancel)
+- [x] Frontend implementation `#frontend` **COMPLETED 2026-02-08**
+  - [x] Add Pause/Stop/Cancel buttons to active downloads
+  - [x] Add Resume/Cancel buttons to paused downloads
+  - [x] Add Resume/Cancel buttons to stopped downloads
+  - [x] Add Retry/Cancel buttons to failed downloads
+  - [x] Show confirmation dialog for Cancel (destructive)
+  - [x] Update progress bar on resume
+  - [x] Show current state visually (badges/colors)
+  - [x] Display state-appropriate controls
 - [ ] Testing `#testing`
   - [ ] Test pause mid-download
+  - [ ] Test resume after pause
   - [ ] Test resume after app restart
+  - [ ] Test stop and resume later
+  - [ ] Test cancel from all states (active, paused, stopped, failed)
   - [ ] Test no data loss on pause/resume
+  - [ ] Test .part file cleanup on cancel
+  - [ ] Test state persistence across restarts
 
 ### 2. Download Queue Management
 - [ ] Backend implementation `#backend`

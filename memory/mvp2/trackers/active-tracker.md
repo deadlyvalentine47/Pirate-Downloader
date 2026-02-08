@@ -1,11 +1,84 @@
 # MVP2 Active Tasks Tracker
 
 **Last Updated**: 2026-02-08
-**Current Step**: Frontend Refactoring Complete ✅
+**Current Phase**: Phase 1 - Core Download Features
+
+---
+
+## Phase 0: Prerequisites - ✅ COMPLETED 2026-02-08
+
+**Status**: Complete  
+**Duration**: 2026-02-06 to 2026-02-08  
+
+### Completed Items
+- ✅ **Codebase Refactoring**: Modular file structure (8 modules, 227 lines)
+- ✅ **Dependency Management**: All MVP2 dependencies added (rusqlite, uuid, arboard, notify-rust, etc.)
+- ✅ **Logging & Observability**: Structured logging with tracing (18 println! → tracing macros)
+- ✅ **Error Handling**: Custom error types with thiserror (DownloadError enum)
+- ✅ **Frontend Refactoring**: Modular architecture with Zustand (183 → 42 lines, 77% reduction)
+
+### Deferred to End of MVP2
+- ⏸️ **CI/CD Pipeline**: GitHub Actions, automated builds/releases
+- ⏸️ **Testing Framework**: Unit tests, integration tests, E2E tests
+- ⏸️ **Documentation**: API docs, user guide, developer guide
+- ⏸️ **Security Audit**: Full dependency audit, code security review
+
+**Rationale**: Focus on core MVP2 features first, then add infrastructure/documentation at the end.
+
+---
 
 ---
 
 ## Currently Active Tasks
+
+## Download Control (Pause/Resume/Stop/Cancel) - IN PROGRESS
+
+**Started**: 2026-02-08  
+**Tags**: #backend #frontend #critical  
+**Estimated Time**: 3-4 days  
+
+### Description
+Implement 4 download control operations: Pause, Resume, Stop, and Cancel. Each operation has distinct behavior for state management and file handling. Includes comprehensive logging for all operations.
+
+### Progress
+- [x] Create implementation plan (`memory/mvp2/plans/download-control-plan.md`)
+- [x] Create `core/state.rs` - DownloadState enum and DownloadMetadata struct
+- [x] Create `core/persistence.rs` - Save/load/delete state functions with logging
+- [x] Update `core/mod.rs` - Export new modules
+- [x] Update `core/error.rs` - Add Serialization and StateNotFound error variants
+- [x] Update `Cargo.toml` - Enable serde feature for chrono
+- [x] Add `tempfile` to dev-dependencies for unit tests
+- [x] Fix compilation errors - All std::io::Error conversions
+- [x] Verify compilation with `cargo check` ✅ SUCCESS (18 warnings, 0 errors)
+- [x] Create modular command structure - `commands/` directory
+- [x] Create `commands/download_control.rs` - DownloadManager + DownloadControl + 4 commands
+- [x] Create `commands/mod.rs` - Module organization
+- [x] Update `lib.rs` - Register commands and DownloadManager state
+- [x] Add DownloadControl structure with control signals (pause=1, stop=2, cancel=3)
+- [x] Update pause/stop/cancel commands to set control signals
+- [x] Integrate into download_file - Add DownloadManager parameter, generate download_id
+- [x] Register downloads with manager including metadata and control
+- [x] Add signal checking to worker loop - Workers check and exit on signals
+- [x] Add cleanup logic - Remove download from manager on completion
+- [x] Verify compilation ✅ SUCCESS (0 errors, 18 warnings)
+- [ ] Add frontend controls (buttons, dialogs)
+- [ ] Test all operations (pause/resume/stop/cancel)
+
+### Files Created/Modified
+- `memory/mvp2/plans/download-control-plan.md` - Implementation plan
+- `src-tauri/src/core/state.rs` - State management (NEW, 200 lines)
+- `src-tauri/src/core/persistence.rs` - State persistence (NEW, 150 lines)
+- `src-tauri/src/core/mod.rs` - Added module exports
+- `src-tauri/src/core/error.rs` - Added 2 new error variants
+
+### Next Steps
+1. Run `cargo check` to verify compilation
+2. Implement Tauri commands for pause/resume/stop/cancel
+3. Add state tracking to download loop
+
+---
+
+## Currently Active Tasks (Completed)
 
 ## Create Modular File Structure - ✅ COMPLETED
 
