@@ -290,7 +290,9 @@ pub async fn resume_download(
         )
         .await
         {
-            Ok(_) => info!(download_id = %id_cloned, "Resume task completed successfully"),
+            Ok(res) => {
+                info!(download_id = %id_cloned, status = %res.status, "Resume task completed")
+            }
             Err(e) => {
                 error!(download_id = %id_cloned, error = %e, "Resume task failed");
                 let _ = app_handle_error.emit("download-state", "failed");

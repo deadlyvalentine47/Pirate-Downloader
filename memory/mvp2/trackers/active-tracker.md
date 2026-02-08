@@ -31,50 +31,54 @@
 
 ## Currently Active Tasks
 
-## Download Control (Pause/Resume/Stop/Cancel) - IN PROGRESS
+- [x] Add state tracking to download loop
+- [x] Fix Pause/Resume race conditions (Frontend completion logic)
+- [x] Implement Granular Pause Checks in worker loop
+- [x] Fix Zombie Task issue with generation ID
+- [x] Verify state consistency with logs
 
-**Started**: 2026-02-08  
-**Tags**: #backend #frontend #critical  
-**Estimated Time**: 3-4 days  
+### Learnings
+- **State Race Condition**: Frontend was marking "Completed" on any successful return from `download_file`, but Pause also returns successfully. Fixed by returning explicit status (`paused`, `stopped`, `completed`) from backend.
+- **Worker Granularity**: Large chunks prevented immediate pausing. Added `AtomicU8` signal checks inside the inner stream loop for instant response.
+- **Zombie Tasks**: Resuming a download could spawn new workers while old ones were still finishing. Added `generation` ID to invalidate old workers.
+- **Type Safety**: `run_download_task` returning `String` vs `DownloadCommandResult` caused type mismatches. Enforced strict return types.
+
+### Files Changed
+- `src-tauri/src/lib.rs` - Added signal checks, generation ID, return status
+- `src-tauri/src/commands/download_control.rs` - Updated resume logic, event emission
+- `src/hooks/useDownload.ts` - Updated status handling
+- `src/components/download/ActionButtons.tsx` - Updated UI states
+
+### Testing
+- [x] Test pause mid-download - ✅ Verified with logs
+- [x] Test resume after pause - ✅ Verified
+- [x] Test stop and resume - ✅ Verified
+- [x] Test cancel - ✅ Verified with file cleanup
+- [x] Test no data loss - ✅ Verified progress preservation
+
+### Completion Checklist
+- [x] Code complete
+- [x] Tests passing
+- [x] Documentation updated
+- [x] Performance verified
+- [x] Reliability verified
+
+**Completed**: 2026-02-08
+
+---
+
+## Currently Active Tasks (Completed)
+
+## Download Control (Pause/Resume/Stop/Cancel) - ✅ COMPLETED
+
+**Started**: 2026-02-08
+**Completed**: 2026-02-08
+**Tags**: #backend #frontend #critical
+**Estimated Time**: 3-4 days
+**Actual Time**: 1 day
 
 ### Description
 Implement 4 download control operations: Pause, Resume, Stop, and Cancel. Each operation has distinct behavior for state management and file handling. Includes comprehensive logging for all operations.
-
-### Progress
-- [x] Create implementation plan (`memory/mvp2/plans/download-control-plan.md`)
-- [x] Create `core/state.rs` - DownloadState enum and DownloadMetadata struct
-- [x] Create `core/persistence.rs` - Save/load/delete state functions with logging
-- [x] Update `core/mod.rs` - Export new modules
-- [x] Update `core/error.rs` - Add Serialization and StateNotFound error variants
-- [x] Update `Cargo.toml` - Enable serde feature for chrono
-- [x] Add `tempfile` to dev-dependencies for unit tests
-- [x] Fix compilation errors - All std::io::Error conversions
-- [x] Verify compilation with `cargo check` ✅ SUCCESS (18 warnings, 0 errors)
-- [x] Create modular command structure - `commands/` directory
-- [x] Create `commands/download_control.rs` - DownloadManager + DownloadControl + 4 commands
-- [x] Create `commands/mod.rs` - Module organization
-- [x] Update `lib.rs` - Register commands and DownloadManager state
-- [x] Add DownloadControl structure with control signals (pause=1, stop=2, cancel=3)
-- [x] Update pause/stop/cancel commands to set control signals
-- [x] Integrate into download_file - Add DownloadManager parameter, generate download_id
-- [x] Register downloads with manager including metadata and control
-- [x] Add signal checking to worker loop - Workers check and exit on signals
-- [x] Add cleanup logic - Remove download from manager on completion
-- [x] Verify compilation ✅ SUCCESS (0 errors, 18 warnings)
-- [ ] Add frontend controls (buttons, dialogs)
-- [ ] Test all operations (pause/resume/stop/cancel)
-
-### Files Created/Modified
-- `memory/mvp2/plans/download-control-plan.md` - Implementation plan
-- `src-tauri/src/core/state.rs` - State management (NEW, 200 lines)
-- `src-tauri/src/core/persistence.rs` - State persistence (NEW, 150 lines)
-- `src-tauri/src/core/mod.rs` - Added module exports
-- `src-tauri/src/core/error.rs` - Added 2 new error variants
-
-### Next Steps
-1. Run `cargo check` to verify compilation
-2. Implement Tauri commands for pause/resume/stop/cancel
-3. Add state tracking to download loop
 
 ---
 
