@@ -36,3 +36,11 @@ chrono = "0.4"
 
 # Error handling
 thiserror = "1.0"
+
+# Database
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# Utilities
+uuid = { version = "1.11", features = ["v4", "serde"] }
+arboard = "3.4"
+notify-rust = "4.11"

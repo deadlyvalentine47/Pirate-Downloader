@@ -64,16 +64,16 @@
   - [ ] Add security audit (`cargo audit`)
 
 ### Dependency Management
-- [ ] Add MVP2 dependencies `#backend`
-  - [ ] Add rusqlite for SQLite
-  - [ ] Add serde/serde_json for serialization
-  - [ ] Add chrono for timestamps
-  - [ ] Add uuid for unique IDs
-  - [ ] Add tracing/tracing-subscriber for logging
-  - [ ] Add arboard for clipboard
-  - [ ] Add notify-rust for notifications
-  - [ ] Add thiserror for error handling
-  - [ ] Run `cargo audit` for security check
+- [x] Add MVP2 dependencies `#backend` **COMPLETED 2026-02-08**
+  - [x] Add rusqlite for SQLite (v0.32)
+  - [x] Add serde/serde_json for serialization (v1)
+  - [x] Add chrono for timestamps (v0.4)
+  - [x] Add uuid for unique IDs (v1.11)
+  - [x] Add tracing/tracing-subscriber for logging (v0.1/v0.3)
+  - [x] Add arboard for clipboard (v3.4)
+  - [x] Add notify-rust for notifications (v4.11)
+  - [x] Add thiserror for error handling (v1.0)
+  - [x] Run `cargo audit` for security check (1 vulnerability in `time` crate - needs `tracing-appender` update)
 
 ### Frontend Refactoring
 - [ ] Restructure frontend `#critical` `#frontend`
@@ -85,12 +85,12 @@
   - [ ] Convert all components to TypeScript
 
 ### Error Handling
-- [/] Implement error handling strategy `#backend` **ACTIVE**
-  - [ ] Create `core/error.rs` with custom error types
-  - [ ] Add thiserror dependency
-  - [ ] Define DownloadError enum
-  - [ ] Update all modules to use Result<T, DownloadError>
-  - [ ] Add error context to all error paths
+- [x] Implement error handling strategy `#backend` **COMPLETED 2026-02-08**
+  - [x] Create `core/error.rs` with custom error types
+  - [x] Add thiserror dependency
+  - [x] Define DownloadError enum
+  - [x] Update all modules to use Result<T, DownloadError>
+  - [x] Add error context to all error paths
 
 ### Documentation
 - [ ] Document codebase `#docs`

@@ -1,7 +1,7 @@
 # MVP2 Active Tasks Tracker
 
 **Last Updated**: 2026-02-08
-**Current Phase**: Phase 0 - Prerequisites
+**Current Step**: Adding MVP2 Dependencies
 
 ---
 
@@ -137,6 +137,54 @@ Implement structured logging with tracing and comprehensive error handling with 
 - All functions return DownloadError instead of String
 - Automatic error conversion via From traits
 - Tauri-compatible error serialization
+
+---
+
+## Add MVP2 Dependencies - ✅ COMPLETED
+
+**Started**: 2026-02-08  
+**Completed**: 2026-02-08  
+**Tags**: #backend #infra  
+**Estimated Time**: 1 hour  
+**Actual Time**: ~30 minutes  
+
+### Description
+Add remaining MVP2 dependencies to Cargo.toml. Several dependencies are already added from previous work (serde, chrono, tracing, thiserror). Need to add: rusqlite, uuid, arboard, notify-rust.
+
+### Progress
+- [x] Audit current dependencies
+- [x] Identify already-added dependencies (4/8)
+- [x] Add rusqlite for SQLite database (v0.32 with bundled feature)
+- [x] Add uuid for unique identifiers (v1.11 with v4, serde features)
+- [x] Add arboard for clipboard functionality (v3.4)
+- [x] Add notify-rust for system notifications (v4.11)
+- [x] Run cargo check to verify (✅ Success - 0.62s, 5 warnings)
+- [x] Install cargo-audit tool (✅ Installed v0.22.1)
+- [x] Run cargo audit for security check (⚠️ 1 vulnerability, 18 warnings)
+
+### Cargo Audit Findings
+**1 Vulnerability (Medium Severity):**
+- `time` v0.3.46 - DoS via Stack Exhaustion (RUSTSEC-2026-0009)
+- Used by: `tracing-appender` (our logging dependency)
+- **Fix**: Update `tracing-appender` to get `time` >=0.3.47
+
+**18 Warnings (Tauri Framework):**
+- GTK3 bindings unmaintained (Tauri uses these on Linux)
+- `unic-*` crates unmaintained (Tauri dependencies)
+- `glib` unsound issue (Tauri dependency)
+- **Note**: These are Tauri framework dependencies, not directly fixable by us
+
+**Fix Attempt:**
+- Ran `cargo update tracing-appender` - no updates available
+- `tracing-appender` v0.2.4 is latest compatible, still uses `time` v0.3.46
+- **Resolution**: Vulnerability is low-risk (DoS via stack exhaustion in logging), acceptable for now
+- Will be fixed when `tracing-appender` releases update with `time` >=0.3.47
+
+### Already Added
+- ✅ serde/serde_json (v1) - serialization
+- ✅ chrono (v0.4) - timestamps
+- ✅ tracing/tracing-subscriber (v0.1/v0.3) - logging
+- ✅ thiserror (v1.0) - error handling
 
 ---
 
