@@ -1,6 +1,6 @@
 # MVP2 Active Tasks Tracker
 
-**Last Updated**: 2026-02-06  
+**Last Updated**: 2026-02-08
 **Current Phase**: Phase 0 - Prerequisites
 
 ---
@@ -9,11 +9,11 @@
 
 ## Create Modular File Structure - ✅ COMPLETED
 
-**Started**: 2026-02-06  
-**Completed**: 2026-02-06  
-**Tags**: #critical #backend  
-**Estimated Time**: 1-2 days  
-**Actual Time**: 1 day  
+**Started**: 2026-02-06
+**Completed**: 2026-02-06
+**Tags**: #critical #backend
+**Estimated Time**: 1-2 days
+**Actual Time**: 1 day
 
 ### Description
 Refactor monolithic `lib.rs` (333 lines) into modular structure with separate modules for core download engine, storage, queue, network, and utils. **Critical**: Must maintain 100% completion guarantee and high performance.
@@ -32,7 +32,7 @@ Refactor monolithic `lib.rs` (333 lines) into modular structure with separate mo
 
 ### Testing Results
 **Test 1**: 1.87 GB file - ✅ 100% complete, 21.07 MB/s, 88.93s
-**Test 2**: 3.40 GB file - ✅ 100% complete, 15.19 MB/s, 224.10s  
+**Test 2**: 3.40 GB file - ✅ 100% complete, 15.19 MB/s, 224.10s
 **Test 3**: 7.05 GB file - ✅ 100% complete, 20.27 MB/s, 347.87s
 
 All downloads completed successfully with perfect integrity checks. Performance maintained within expected range (15-21 MB/s). Retry system working flawlessly.
@@ -69,6 +69,74 @@ All downloads completed successfully with perfect integrity checks. Performance 
 - [x] Reliability verified
 
 **Completed**: 2026-02-06
+
+---
+
+## Implement Logging & Error Handling - ✅ COMPLETED
+
+**Started**: 2026-02-07
+**Completed**: 2026-02-08
+**Tags**: #critical #backend #infra
+**Estimated Time**: 2-3 days
+**Actual Time**: 2 days
+
+### Description
+Implement structured logging with tracing and comprehensive error handling with custom error types. Replace all `println!` statements with proper logging, create custom error types for better error propagation, and set up log file rotation for production use.
+
+### Progress
+- [x] Analyze current `println!` usage across codebase
+- [x] Add tracing dependencies (tracing, tracing-subscriber, tracing-appender)
+- [x] Add thiserror dependency for error handling
+- [x] Create `core/error.rs` with DownloadError enum
+- [x] Create `utils/logger.rs` for logging configuration
+- [x] Replace `println!` with tracing macros in lib.rs
+- [x] Replace `println!` with tracing macros in all modules
+- [x] Update all functions to return Result<T, DownloadError>
+- [x] Replace all .unwrap() calls with proper error handling
+- [x] Set up log file rotation
+- [x] Add log level configuration
+- [x] Test logging in different scenarios
+- [x] Verify error propagation works correctly
+
+### Learnings
+- **Logger Initialization**: Logger successfully initializes and creates log directory at `%APPDATA%/PirateDownloader/logs/`
+- **Console Output**: DEBUG level logs appear in console during development (npm run tauri dev)
+- **Structured Logging**: Tracing provides clean, structured logs with timestamps and context fields
+- **Log Levels**: INFO for milestones, DEBUG for details, WARN for retries, ERROR for failures
+- **Reqwest Integration**: HTTP client logs (connection pooling, etc.) automatically included at DEBUG level
+
+### Files Changed
+- `Cargo.toml` - Added tracing, tracing-subscriber, tracing-appender, chrono, thiserror
+- `src/core/error.rs` - Created DownloadError enum with 5 error categories
+- `src/core/mod.rs` - Added error module export
+- `src/utils/logger.rs` - Created logger with dev (console+file) and prod (file only) modes
+- `src/utils/mod.rs` - Added logger module export
+- `src/lib.rs` - Replaced 13 println! with tracing macros, initialized logger in run()
+  - Updated download_file signature to return DownloadError
+  - Updated get_file_details signature to return DownloadError
+  - Replaced 4 .unwrap() calls with proper error handling
+  - Replaced all .map_err(|e| e.to_string()) with DownloadError conversions
+- `src/core/integrity.rs` - Replaced 5 println! with tracing macros
+  - Updated verify_download to return DownloadError::Integrity
+
+### Testing
+- [x] Verify logs are written to file
+- [x] Test log rotation works
+- [x] Test different log levels
+- [x] No regressions - download logic unchanged, only logging/error handling added
+
+### Completion Summary
+**Completed**: 2026-02-08  
+**Compilation**: ✅ Success (0.60s, 5 harmless warnings)  
+**Download Logic**: ✅ Unchanged - no modifications to core download functionality  
+**Warnings**: Unused code reserved for future use (`Parse`, `ErrorContext`, `ByteCounter`, `get_current_log_file`)  
+
+**Key Achievements:**
+- 18 println! statements → structured tracing logs
+- 4 .unwrap() calls → proper error handling
+- All functions return DownloadError instead of String
+- Automatic error conversion via From traits
+- Tauri-compatible error serialization
 
 ---
 

@@ -1,4 +1,6 @@
+use super::error::DownloadError;
 /// Download integrity verification
+use tracing::{error, info};
 
 /// Verifies download completion and integrity
 ///
@@ -16,29 +18,42 @@
 /// `Ok(())` if verification passes
 ///
 /// # Errors
-/// Returns error message if download is incomplete
+/// Returns DownloadError::Integrity if download is incomplete
 pub fn verify_download(
     downloaded_bytes: u64,
     total_size: u64,
     completed_chunks: u64,
     total_chunks: u64,
-) -> Result<(), String> {
-    println!("Verifying integrity...");
-    println!("Completed chunks: {} / {}", completed_chunks, total_chunks);
-    println!(
-        "Downloaded bytes: {} / {} ({:.2}%)",
-        downloaded_bytes,
-        total_size,
-        (downloaded_bytes as f64 / total_size as f64) * 100.0
+) -> Result<(), DownloadError> {
+    info!("Verifying download integrity...");
+
+    let completion_percent = (downloaded_bytes as f64 / total_size as f64) * 100.0;
+
+    info!(
+        completed_chunks = completed_chunks,
+        total_chunks = total_chunks,
+        downloaded_bytes = downloaded_bytes,
+        total_bytes = total_size,
+        completion_percent = completion_percent,
+        "Integrity check status"
     );
 
     if downloaded_bytes < total_size {
-        return Err(format!(
-            "Download FAILED: {} / {} bytes ({} / {} chunks). Retry.",
-            downloaded_bytes, total_size, completed_chunks, total_chunks
-        ));
+        error!(
+            downloaded_bytes = downloaded_bytes,
+            total_bytes = total_size,
+            completed_chunks = completed_chunks,
+            total_chunks = total_chunks,
+            "Download incomplete - verification failed"
+        );
+        return Err(DownloadError::Integrity {
+            message: format!(
+                "Download FAILED: {} / {} bytes ({} / {} chunks). Retry.",
+                downloaded_bytes, total_size, completed_chunks, total_chunks
+            ),
+        });
     }
 
-    println!("Integrity Check PASSED: 100%");
+    info!("Integrity check PASSED: 100%");
     Ok(())
 }

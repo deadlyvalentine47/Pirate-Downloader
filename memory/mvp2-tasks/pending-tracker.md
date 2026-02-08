@@ -44,12 +44,15 @@
   - [ ] Set up benchmarking with Criterion
 
 ### Logging & Observability
-- [ ] Implement structured logging `#backend` `#infra`
-  - [ ] Add tracing dependencies
-  - [ ] Replace all `println!` with `tracing` macros
-  - [ ] Set up log file rotation
-  - [ ] Add log level configuration in settings
-  - [ ] Create logger utility module
+- [x] Implement structured logging `#backend` `#infra` **COMPLETED 2026-02-08**
+  - [x] Add tracing dependencies
+  - [x] Replace all `println!` with `tracing` macros
+  - [x] Set up log file rotation
+  - [x] Configure log levels (dev: DEBUG, prod: INFO)
+- [x] Implement error handling `#backend` `#infra` **COMPLETED 2026-02-08**
+  - [x] Create custom error types with thiserror
+  - [x] Replace all `.unwrap()` calls
+  - [x] Update function signatures to return `Result<T, DownloadError>`
 
 ### CI/CD Pipeline
 - [ ] Set up GitHub Actions `#critical` `#infra`
@@ -82,7 +85,7 @@
   - [ ] Convert all components to TypeScript
 
 ### Error Handling
-- [ ] Implement error handling strategy `#backend`
+- [/] Implement error handling strategy `#backend` **ACTIVE**
   - [ ] Create `core/error.rs` with custom error types
   - [ ] Add thiserror dependency
   - [ ] Define DownloadError enum
@@ -146,6 +149,24 @@
   - [ ] Test header parsing
   - [ ] Test URL extraction
   - [ ] Test duplicate handling
+
+### 3.5. Improve Link Detection & Filename Extraction
+- [ ] Backend implementation `#backend` `#enhancement`
+  - [ ] Detect streaming links (m3u8, ts segments)
+  - [ ] Extract proper filenames from Content-Disposition headers
+  - [ ] Handle worker/CDN URLs with encoded filenames
+  - [ ] Fallback to content-type based extensions (.ts, .mp4, .mkv)
+  - [ ] Add MIME type detection for unknown extensions
+  - [ ] Handle redirect chains to get final filename
+- [ ] Testing `#testing`
+  - [ ] Test m3u8 streaming links
+  - [ ] Test worker URLs (cloudflare workers, etc)
+  - [ ] Test various video formats (.ts, .mp4, .mkv, .avi)
+  - [ ] Test links without extensions
+- [ ] Notes
+  - Issue: Links like `https://67streams.online/movie/.../index.m3u8` default to `download.dat`
+  - IDM detects these as video files and uses proper extensions
+  - Need to improve Content-Disposition parsing and MIME type detection
 
 ### 4. Download History
 - [ ] Backend implementation `#backend`
