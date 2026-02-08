@@ -22,6 +22,13 @@ use core::types;
 use network::{client, headers};
 use utils::{filesystem, logger};
 
+/// Result returned by download commands to the frontend
+#[derive(serde::Serialize)]
+pub struct DownloadCommandResult {
+    pub id: String,
+    pub status: String, // "completed", "paused", "stopped"
+}
+
 /// Core download loop - shared by new downloads and resumes
 pub async fn run_download_task(
     app: tauri::AppHandle,
@@ -30,7 +37,7 @@ pub async fn run_download_task(
     control: Arc<commands::DownloadControl>,
     manager: commands::DownloadManager,
     generation: u32,
-) -> Result<String, DownloadError> {
+) -> Result<DownloadCommandResult, DownloadError> {
     let url = metadata.url.clone();
     let filepath = metadata.filepath.clone();
     let total_size = metadata.total_size;
@@ -286,10 +293,23 @@ pub async fn run_download_task(
 
     // CRITICAL: Check if we finished due to a signal (Pause/Stop/Cancel)
     // If signaled, we MUST NOT run completion logic
-    let final_signal = control.signal.load(Ordering::Relaxed);
+    let final_signal = control.signal.load(Ordering::SeqCst);
+    info!(
+        "Download loop finished. Final signal check: {}",
+        final_signal
+    );
+
     if final_signal != 0 {
         info!("Download task finished due to signal: {}", final_signal);
-        return Ok(download_id);
+        let status = match final_signal {
+            1 => "paused",
+            2 => "stopped",
+            _ => "cancelled",
+        };
+        return Ok(DownloadCommandResult {
+            id: download_id,
+            status: status.to_string(),
+        });
     }
     monitor_handle.abort();
 
@@ -297,7 +317,15 @@ pub async fn run_download_task(
     let signal = control.signal.load(Ordering::Relaxed);
     if signal != 0 {
         // Stopped/Paused/Cancelled
-        return Ok(download_id);
+        let status = match signal {
+            1 => "paused",
+            2 => "stopped",
+            _ => "cancelled",
+        };
+        return Ok(DownloadCommandResult {
+            id: download_id,
+            status: status.to_string(),
+        });
     }
 
     // If we are here, we should be done. Verify.
@@ -346,7 +374,12 @@ pub async fn run_download_task(
     manager.remove_download(&download_id).await;
     info!(download_id = %download_id, "Download completed and removed from manager");
 
-    Ok(download_id)
+    info!(download_id = %download_id, "Download completed and removed from manager");
+
+    Ok(DownloadCommandResult {
+        id: download_id,
+        status: "completed".to_string(),
+    })
 }
 
 #[tauri::command]
@@ -356,7 +389,7 @@ async fn download_file(
     filepath: String,
     threads: u64,
     manager: tauri::State<'_, commands::DownloadManager>,
-) -> Result<String, DownloadError> {
+) -> Result<DownloadCommandResult, DownloadError> {
     // Generate unique download ID
     let download_id = uuid::Uuid::new_v4().to_string();
     let download_control = Arc::new(commands::DownloadControl::new());

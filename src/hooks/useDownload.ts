@@ -53,17 +53,28 @@ export const useDownload = () => {
 
         setStatus('Downloading...');
         try {
-            // Backend emits download-id event and returns ID when complete
-            await invoke('download_file', {
+            // Backend emits download-id event and returns result when complete/paused
+            interface DownloadResult {
+                id: string;
+                status: string;
+            }
+            
+            const result = await invoke<DownloadResult>('download_file', {
                 url: url,
                 filepath: savePath,
                 threads: Number(threads)
             });
 
-            // Trigger history update (but do not force 'completed' state here)
-            // State updates come from backend events
-            setStatus('Finished');
-            addItem(url, savePath, totalSize, 'Success');
+            if (result.status === 'completed') {
+                setStatus('Finished');
+                addItem(url, savePath, totalSize, 'Success');
+            } else if (result.status === 'paused') {
+                setStatus('Paused');
+            } else if (result.status === 'stopped') {
+                setStatus('Stopped');
+            } else {
+                setStatus('Cancelled');
+            }
         } catch (e) {
             setStatus('Error: ' + e);
             addItem(url, savePath, 0, 'Failed');

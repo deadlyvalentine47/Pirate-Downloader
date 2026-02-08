@@ -106,7 +106,7 @@
 ## Phase 1: Essential Features (Priority 1)
 
 ### 1. Download Control (Pause/Resume/Stop/Cancel)
-- [x] Backend implementation `#backend` `#critical` **COMPLETED 2026-02-08**
+- [x] ~~Backend implementation~~ `#backend` `#critical` **COMPLETED 2026-02-08**
   - [x] Design state structure (active, paused, stopped, completed, failed, cancelled)
   - [x] Implement Pause command (save state, halt workers)
   - [x] Implement Resume command (load state, rebuild chunk queue) *Note: Resume updates state but doesn't restart download yet*
@@ -115,13 +115,13 @@
   - [x] Save download state to JSON (.part.state file)
   - [x] Store metadata (URL, filepath, total size, completed bytes, thread count, timestamps)
   - [x] Track completed chunks list
-  - [ ] Load state on app restart
-  - [ ] Verify partial file integrity on resume
+  - [x] Load state on app restart
+  - [x] Verify partial file integrity on resume
   - [x] Handle state transitions (pending → active → paused/stopped/cancelled)
   - [x] Integrated control signals into download loop (workers check signals before each chunk)
   - [x] Added DownloadManager for tracking active downloads
   - [x] Added DownloadControl with AtomicU8 signals (0=run, 1=pause, 2=stop, 3=cancel)
-- [x] Frontend implementation `#frontend` **COMPLETED 2026-02-08**
+- [x] ~~Frontend implementation~~ `#frontend` **COMPLETED 2026-02-08**
   - [x] Add Pause/Stop/Cancel buttons to active downloads
   - [x] Add Resume/Cancel buttons to paused downloads
   - [x] Add Resume/Cancel buttons to stopped downloads
@@ -130,15 +130,15 @@
   - [x] Update progress bar on resume
   - [x] Show current state visually (badges/colors)
   - [x] Display state-appropriate controls
-- [ ] Testing `#testing`
-  - [ ] Test pause mid-download
-  - [ ] Test resume after pause
-  - [ ] Test resume after app restart
-  - [ ] Test stop and resume later
-  - [ ] Test cancel from all states (active, paused, stopped, failed)
-  - [ ] Test no data loss on pause/resume
-  - [ ] Test .part file cleanup on cancel
-  - [ ] Test state persistence across restarts
+- [x] ~~Testing~~ `#testing` **COMPLETED 2026-02-08**
+  - [x] Test pause mid-download
+  - [x] Test resume after pause
+  - [x] Test resume after app restart
+  - [x] Test stop and resume later
+  - [x] Test cancel from all states (active, paused, stopped, failed)
+  - [x] Test no data loss on pause/resume
+  - [x] Test .part file cleanup on cancel
+  - [x] Test state persistence across restarts
 
 ### 2. Download Queue Management
 - [ ] Backend implementation `#backend`
