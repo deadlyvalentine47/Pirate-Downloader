@@ -18,6 +18,379 @@ Transform Pirate Downloader from a basic multi-threaded download tool into a **f
 
 ---
 
+## Prerequisites (Phase 0: Foundation)
+
+Before starting MVP2 development, we must establish a solid foundation to ensure maintainability, testability, and scalability.
+
+### 🏗️ 1. Codebase Refactoring (CRITICAL)
+
+**Problem**: Currently, all download logic lives in `lib.rs` (~333 lines). Adding MVP2 features will balloon this to 1000+ lines, making it unmaintainable.
+
+**Solution**: Modular architecture with clear separation of concerns.
+
+#### Proposed File Structure
+
+```
+src-tauri/
+├── src/
+│   ├── main.rs                    # Entry point (Tauri setup only)
+│   ├── lib.rs                     # Public API (Tauri commands only)
+│   │
+│   ├── core/                      # Core download engine
+│   │   ├── mod.rs                 # Module exports
+│   │   ├── downloader.rs          # Main download orchestrator
+│   │   ├── chunk.rs               # Chunk management & retry logic
+│   │   ├── worker.rs              # Worker thread implementation
+│   │   ├── integrity.rs           # Verification & byte counting
+│   │   └── types.rs               # Shared types (DownloadState, ChunkInfo, etc.)
+│   │
+│   ├── storage/                   # Persistence layer
+│   │   ├── mod.rs
+│   │   ├── database.rs            # SQLite connection & migrations
+│   │   ├── downloads.rs           # Downloads table CRUD
+│   │   ├── history.rs             # History table CRUD
+│   │   ├── settings.rs            # Settings table CRUD
+│   │   └── categories.rs          # Categories table CRUD
+│   │
+│   ├── queue/                     # Queue management
+│   │   ├── mod.rs
+│   │   ├── manager.rs             # Queue orchestrator (add, remove, reorder)
+│   │   ├── state.rs               # Queue state machine (pending → active → complete)
+│   │   └── persistence.rs         # Save/load queue to disk
+│   │
+│   ├── network/                   # Network utilities
+│   │   ├── mod.rs
+│   │   ├── client.rs              # HTTP client configuration
+│   │   ├── headers.rs             # Header parsing (filename, size, etc.)
+│   │   └── speed_limiter.rs       # Bandwidth limiting (token bucket)
+│   │
+│   ├── utils/                     # Utilities
+│   │   ├── mod.rs
+│   │   ├── filesystem.rs          # File operations (allocation, verification)
+│   │   ├── sanitize.rs            # Filename sanitization
+│   │   └── logger.rs              # Structured logging
+│   │
+│   └── integrations/              # External integrations (Phase 2+)
+│       ├── mod.rs
+│       ├── clipboard.rs           # Clipboard monitoring
+│       ├── notifications.rs       # Desktop notifications
+│       └── tray.rs                # System tray
+│
+├── Cargo.toml
+└── tauri.conf.json
+```
+
+#### Module Responsibilities
+
+| Module | Responsibility | Max Lines |
+|--------|---------------|-----------|
+| `lib.rs` | Tauri command definitions only | ~100 |
+| `core/downloader.rs` | Orchestrate download lifecycle | ~200 |
+| `core/chunk.rs` | Chunk logic, retry tracking | ~150 |
+| `core/worker.rs` | Worker thread implementation | ~200 |
+| `core/integrity.rs` | Byte verification, checksums | ~100 |
+| `storage/database.rs` | SQLite setup, migrations | ~150 |
+| `storage/downloads.rs` | Downloads CRUD | ~200 |
+| `queue/manager.rs` | Queue operations | ~200 |
+| `network/client.rs` | HTTP client setup | ~100 |
+
+**Acceptance Criteria**:
+- ✅ No single file exceeds 300 lines
+- ✅ Each module has a single, clear responsibility
+- ✅ All modules have unit tests
+- ✅ Public APIs are documented with rustdoc
+
+---
+
+### 🧪 2. Testing Framework
+
+**Problem**: Currently no automated tests. Adding features without tests will cause regressions.
+
+**Solution**: Comprehensive test coverage before MVP2.
+
+#### Test Structure
+
+```
+src-tauri/
+├── src/
+│   └── (modules as above)
+├── tests/
+│   ├── integration/
+│   │   ├── download_flow.rs      # End-to-end download tests
+│   │   ├── pause_resume.rs       # Pause/resume scenarios
+│   │   └── queue_management.rs   # Queue operations
+│   └── fixtures/
+│       ├── test_server.rs         # Mock HTTP server
+│       └── test_files.rs          # Test file generators
+└── Cargo.toml
+```
+
+#### Test Coverage Goals
+
+- **Unit Tests**: 80% coverage for core modules
+- **Integration Tests**: All critical user flows
+- **Mock Server**: Simulate slow/failing connections
+- **Benchmarks**: Performance regression tests
+
+**Tools**:
+- `cargo test` - Standard Rust testing
+- `mockito` - HTTP mocking
+- `criterion` - Benchmarking
+- `cargo-tarpaulin` - Coverage reports
+
+**Acceptance Criteria**:
+- ✅ All core modules have unit tests
+- ✅ Integration tests for download, pause, resume
+- ✅ CI runs tests on every commit
+- ✅ Coverage reports generated automatically
+
+---
+
+### 📊 3. Logging & Observability
+
+**Problem**: Current logging is ad-hoc `println!` statements. Debugging production issues is difficult.
+
+**Solution**: Structured logging with levels and filtering.
+
+#### Implementation
+
+```rust
+// Use `tracing` crate for structured logging
+use tracing::{info, warn, error, debug, instrument};
+
+#[instrument(skip(url))]
+async fn download_chunk(chunk_id: u64, url: &str) -> Result<Vec<u8>> {
+    debug!(chunk_id, "Starting chunk download");
+    
+    match fetch_chunk(url).await {
+        Ok(data) => {
+            info!(chunk_id, bytes = data.len(), "Chunk downloaded successfully");
+            Ok(data)
+        }
+        Err(e) => {
+            error!(chunk_id, error = %e, "Chunk download failed");
+            Err(e)
+        }
+    }
+}
+```
+
+**Features**:
+- Log levels: TRACE, DEBUG, INFO, WARN, ERROR
+- Structured fields (chunk_id, bytes, speed, etc.)
+- File rotation (max 10MB per file, keep 5 files)
+- User-configurable verbosity in settings
+
+**Acceptance Criteria**:
+- ✅ All modules use `tracing` instead of `println!`
+- ✅ Logs saved to `~/.pirate-downloader/logs/`
+- ✅ Settings UI has "Debug Mode" toggle
+- ✅ Logs include timestamps, thread IDs, and context
+
+---
+
+### 🔄 4. CI/CD Pipeline
+
+**Problem**: Manual testing is error-prone. Need automated checks on every commit.
+
+**Solution**: GitHub Actions workflow for testing, linting, and building.
+
+#### Workflow
+
+```yaml
+# .github/workflows/ci.yml
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - run: cargo test --all-features
+      - run: cargo clippy -- -D warnings
+      - run: cargo fmt --check
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: cargo tarpaulin --out Xml
+      - uses: codecov/codecov-action@v3
+```
+
+**Checks**:
+- ✅ Tests pass on Windows, macOS, Linux
+- ✅ No clippy warnings
+- ✅ Code formatted with `rustfmt`
+- ✅ Coverage reports uploaded to Codecov
+
+---
+
+### 📦 5. Dependency Management
+
+**Problem**: Need to add new dependencies for MVP2 (SQLite, notifications, etc.). Must ensure compatibility.
+
+**Solution**: Carefully vetted dependency list with version pinning.
+
+#### New Dependencies
+
+```toml
+[dependencies]
+# Existing
+reqwest = { version = "0.11", features = ["stream"] }
+tokio = { version = "1.35", features = ["full"] }
+tauri = { version = "2.0", features = ["dialog", "notification"] }
+
+# New for MVP2
+rusqlite = { version = "0.30", features = ["bundled"] }  # SQLite
+serde = { version = "1.0", features = ["derive"] }       # Serialization
+serde_json = "1.0"                                        # JSON
+chrono = "0.4"                                            # Timestamps
+uuid = { version = "1.6", features = ["v4"] }            # Unique IDs
+tracing = "0.1"                                           # Logging
+tracing-subscriber = "0.3"                                # Log output
+arboard = "3.3"                                           # Clipboard
+notify-rust = "4.10"                                      # Notifications
+
+[dev-dependencies]
+mockito = "1.2"                                           # HTTP mocking
+criterion = "0.5"                                         # Benchmarking
+tempfile = "3.8"                                          # Temp files for tests
+```
+
+**Acceptance Criteria**:
+- ✅ All dependencies have stable versions (no 0.x)
+- ✅ Security audit passes (`cargo audit`)
+- ✅ No duplicate dependencies
+- ✅ Bundle size remains < 10MB
+
+---
+
+### 🎨 6. Frontend Refactoring
+
+**Problem**: Current UI is minimal. Need component library for MVP2 features.
+
+**Solution**: Component-based architecture with state management.
+
+#### Frontend Structure
+
+```
+src/
+├── components/
+│   ├── common/                    # Reusable components
+│   │   ├── Button.tsx
+│   │   ├── Input.tsx
+│   │   ├── ProgressBar.tsx
+│   │   └── Modal.tsx
+│   ├── download/                  # Download-specific
+│   │   ├── DownloadItem.tsx       # Single download card
+│   │   ├── DownloadList.tsx       # List of downloads
+│   │   └── AddDownloadDialog.tsx  # Add URL modal
+│   ├── queue/
+│   │   ├── QueueView.tsx          # Queue management
+│   │   └── QueueItem.tsx          # Single queue item
+│   ├── history/
+│   │   ├── HistoryView.tsx        # History list
+│   │   └── HistoryItem.tsx        # Single history entry
+│   └── settings/
+│       ├── SettingsPanel.tsx      # Main settings
+│       └── SettingSection.tsx     # Settings group
+├── stores/
+│   ├── downloadStore.ts           # Download state (Zustand)
+│   ├── queueStore.ts              # Queue state
+│   ├── settingsStore.ts           # Settings state
+│   └── historyStore.ts            # History state
+├── hooks/
+│   ├── useDownload.ts             # Download operations
+│   ├── useQueue.ts                # Queue operations
+│   └── useSettings.ts             # Settings operations
+├── utils/
+│   ├── formatBytes.ts             # Size formatting
+│   ├── formatSpeed.ts             # Speed formatting
+│   └── formatTime.ts              # Duration formatting
+└── App.tsx
+```
+
+**State Management**: Zustand (lightweight, TypeScript-friendly)
+
+**Acceptance Criteria**:
+- ✅ All components are TypeScript
+- ✅ Reusable components in `common/`
+- ✅ State management with Zustand
+- ✅ No prop drilling (use stores)
+
+---
+
+### 🔐 7. Error Handling Strategy
+
+**Problem**: Current error handling is inconsistent. Need unified approach.
+
+**Solution**: Custom error types with context.
+
+#### Error Types
+
+```rust
+// src/core/error.rs
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum DownloadError {
+    #[error("Network error: {0}")]
+    Network(#[from] reqwest::Error),
+    
+    #[error("File system error: {0}")]
+    FileSystem(#[from] std::io::Error),
+    
+    #[error("Database error: {0}")]
+    Database(#[from] rusqlite::Error),
+    
+    #[error("Chunk {chunk_id} failed after {attempts} attempts")]
+    ChunkFailed { chunk_id: u64, attempts: u32 },
+    
+    #[error("Integrity check failed: {downloaded} / {expected} bytes")]
+    IntegrityFailed { downloaded: u64, expected: u64 },
+    
+    #[error("Invalid URL: {0}")]
+    InvalidUrl(String),
+}
+
+pub type Result<T> = std::result::Result<T, DownloadError>;
+```
+
+**Acceptance Criteria**:
+- ✅ All errors use custom types
+- ✅ Errors include context (chunk_id, URL, etc.)
+- ✅ User-friendly error messages in UI
+- ✅ Errors logged with full context
+
+---
+
+## Summary: Phase 0 Checklist
+
+Before starting MVP2 feature development:
+
+- [ ] **Refactor codebase** into modular structure
+- [ ] **Add unit tests** for all core modules
+- [ ] **Set up CI/CD** pipeline (GitHub Actions)
+- [ ] **Implement structured logging** (tracing)
+- [ ] **Add dependencies** for MVP2 (SQLite, etc.)
+- [ ] **Refactor frontend** with component library
+- [ ] **Implement error handling** strategy
+- [ ] **Documentation** (rustdoc for all public APIs)
+
+**Estimated Time**: 1-2 weeks  
+**Priority**: CRITICAL (blocks all MVP2 work)
+
+---
+
 ## Feature Categories
 
 ### 🎯 Priority 1: Essential Features (Must Have)

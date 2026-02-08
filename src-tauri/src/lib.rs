@@ -1,57 +1,57 @@
-use reqwest::header::CONTENT_DISPOSITION;
+// Module declarations
+mod core;
+mod network;
+mod utils;
+
+// Imports
 use reqwest::header::RANGE;
-use std::fs::File;
-use std::io::{Seek, SeekFrom, Write};
+use std::io::SeekFrom;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tauri::Emitter;
 use tokio::io::AsyncSeekExt;
 use tokio::io::AsyncWriteExt;
+use tracing::{debug, error, info, warn};
+
+// Module imports
+use core::error::DownloadError;
+use core::integrity;
+use core::types;
+use network::{client, headers};
+use utils::{filesystem, logger};
+
 #[tauri::command]
 async fn download_file(
     app: tauri::AppHandle,
     url: String,
     filepath: String,
     threads: u64,
-) -> Result<String, String> {
-    let client = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-        .build()
-        .map_err(|e| e.to_string())?;
+) -> Result<String, DownloadError> {
+    let client = client::create_client()?;
+
     // 1. Get Size
-    let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    let response = client.get(&url).send().await?;
     let total_size = response.content_length().unwrap_or(0);
     if total_size < 1 {
-        return Err("File has no size!".to_string());
+        return Err(DownloadError::Config("File has no size!".to_string()));
     }
     // CRITICAL: Tell Frontend the size immediately (Fixes 0GB bug)
     let _ = app.emit("download-start", total_size);
-    println!("Starting Download: {}", url);
-    println!(
-        "File Size: {} bytes ({} MB)",
-        total_size,
-        total_size / 1024 / 1024
+    info!(
+        url = %url,
+        size_bytes = total_size,
+        size_mb = total_size / 1024 / 1024,
+        "Starting download"
     );
     let start_time = std::time::Instant::now();
+
     // 2. Allocator (Sparse File)
     let path = PathBuf::from(&filepath);
-    {
-        let mut file = File::create(&path).map_err(|e| e.to_string())?;
-        file.seek(SeekFrom::Start(total_size - 1))
-            .map_err(|e| e.to_string())?;
-        file.write_all(&[0]).map_err(|e| e.to_string())?;
-    }
+    filesystem::allocate_sparse_file(&path, total_size)?;
+
     // 3. Dynamic Chunking (Tiered Optimization)
-    let chunk_size = if total_size < 100 * 1024 * 1024 {
-        512 * 1024 // 512KB for < 100MB
-    } else if total_size < 1 * 1024 * 1024 * 1024 {
-        4 * 1024 * 1024 // 4MB for 100MB - 1GB
-    } else if total_size < 10 * 1024 * 1024 * 1024 {
-        16 * 1024 * 1024 // 16MB for 1GB - 10GB
-    } else {
-        64 * 1024 * 1024 // 64MB for > 10GB
-    };
+    let chunk_size = filesystem::calculate_chunk_size(total_size);
     let total_chunks = (total_size + chunk_size - 1) / chunk_size;
     // Robust Queue: If a chunk fails, it goes back here.
     let mut chunks_vec = Vec::new();
@@ -75,12 +75,17 @@ async fn download_file(
         f64::MAX,
         std::time::Instant::now(),
     )));
-    let actual_threads = if threads > 0 { threads } else { 8 };
+    let actual_threads = if threads > 0 {
+        threads
+    } else {
+        types::DEFAULT_THREADS
+    };
     let mut handles = vec![];
-    println!(
-        "Starting {} threads (Dynamic Mode) | Chunk Size: {} MB",
-        actual_threads,
-        chunk_size / 1024 / 1024
+    info!(
+        threads = actual_threads,
+        chunk_size_mb = chunk_size / 1024 / 1024,
+        total_chunks = total_chunks,
+        "Starting download workers"
     );
     for _ in 0..actual_threads {
         let url = url.clone();
@@ -90,19 +95,17 @@ async fn download_file(
         let retry_counts = chunk_retry_counts.clone();
         let completed = completed_chunks.clone();
         let downloaded_counter = downloaded_bytes.clone();
-        let stats_monitor = speed_stats.clone();
+        let _stats_monitor = speed_stats.clone();
         let handle = tokio::spawn(async move {
-            let client = reqwest::Client::builder()
-                .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                .read_timeout(std::time::Duration::from_secs(5)) // Aggressive 5s timeout
-                .connect_timeout(std::time::Duration::from_secs(5))
-                .build()
-                .unwrap();
-            let file = tokio::fs::OpenOptions::new()
-                .write(true)
-                .open(&path)
-                .await
-                .unwrap();
+            let client = client::create_worker_client();
+
+            let file = match tokio::fs::OpenOptions::new().write(true).open(&path).await {
+                Ok(f) => f,
+                Err(e) => {
+                    error!(error = %e, "Failed to open file for writing");
+                    return;
+                }
+            };
             let mut writer = tokio::io::BufWriter::with_capacity(128 * 1024, file);
             loop {
                 // Check if all chunks are done
@@ -133,9 +136,13 @@ async fn download_file(
                 };
 
                 // Disable speed enforcer for chunks that have been retried 3+ times
-                let enforce_speed = retry_count < 3;
+                let enforce_speed = retry_count < types::ADAPTIVE_RETRY_THRESHOLD;
                 if retry_count > 1 {
-                    println!("Chunk {} retry attempt #{}", idx, retry_count);
+                    warn!(
+                        chunk_id = idx,
+                        retry_count = retry_count,
+                        "Chunk retry attempt"
+                    );
                 }
 
                 let start = idx * chunk_size;
@@ -146,7 +153,7 @@ async fn download_file(
                 let range_header = format!("bytes={}-{}", start, end);
                 let mut success = false;
                 let mut attempts = 0;
-                while attempts < 5 && !success {
+                while attempts < types::CHUNK_RETRY_LIMIT && !success {
                     // 5 Retries per grab
                     attempts += 1;
                     if let Ok(mut response) = client
@@ -164,10 +171,10 @@ async fn download_file(
                                     // SPEED ENFORCEMENT: > 300KB/s (but only for fresh chunks)
                                     if enforce_speed {
                                         let elapsed = attempt_start.elapsed().as_secs_f64();
-                                        if elapsed > 3.0 {
+                                        if elapsed > types::SPEED_ENFORCEMENT_DELAY {
                                             let speed =
                                                 (bytes_this_attempt as f64 / 1024.0) / elapsed;
-                                            if speed < 300.0 {
+                                            if speed < types::SPEED_ENFORCEMENT_THRESHOLD {
                                                 // Too slow? Kill it.
                                                 chunk_ok = false;
                                                 break;
@@ -198,21 +205,23 @@ async fn download_file(
                                     let new_completed =
                                         completed.fetch_add(1, Ordering::Relaxed) + 1;
 
-                                    println!(
-                                        "✓ Chunk {} complete ({}/{}) - {} MB total",
-                                        idx,
-                                        new_completed,
-                                        total_chunks,
-                                        new / 1048576
+                                    debug!(
+                                        chunk_id = idx,
+                                        completed = new_completed,
+                                        total = total_chunks,
+                                        mb_total = new / 1048576,
+                                        "Chunk complete"
                                     );
 
                                     // Emit progress update
                                     let _ = app_handle.emit("download-progress", new);
                                 } else if chunk_ok {
                                     // Partial download - not actually complete!
-                                    println!(
-                                        "⚠ Chunk {} incomplete: {} / {} bytes",
-                                        idx, bytes_this_attempt, expected_bytes
+                                    warn!(
+                                        chunk_id = idx,
+                                        downloaded = bytes_this_attempt,
+                                        expected = expected_bytes,
+                                        "Chunk incomplete - forcing retry"
                                     );
                                     chunk_ok = false; // Force retry
                                 }
@@ -225,104 +234,92 @@ async fn download_file(
                 }
                 if !success {
                     // CRITICAL: Push back to queue to be retried by ANY thread
-                    println!(
-                        "✗ Chunk {} failed after 5 attempts! Pushing back to queue.",
-                        idx
+                    error!(
+                        chunk_id = idx,
+                        attempts = types::CHUNK_RETRY_LIMIT,
+                        "Chunk failed after max attempts - pushing back to queue"
                     );
                     let mut q = queue.lock().await;
                     q.push_back(idx);
                 }
             }
-            writer.flush().await.unwrap();
+            if let Err(e) = writer.flush().await {
+                error!(error = %e, "Failed to flush writer");
+            }
         });
         handles.push(handle);
     }
     for handle in handles {
-        handle.await.map_err(|e| e.to_string())?;
+        handle
+            .await
+            .map_err(|e| DownloadError::TaskJoin(e.to_string()))?;
     }
     let elapsed = start_time.elapsed();
     let avg_speed = (total_size as f64 / 1024.0 / 1024.0) / elapsed.as_secs_f64();
-    println!("--- Download Summary ---");
-    println!("Time: {:.2} seconds", elapsed.as_secs_f64());
-    println!("Average Speed: {:.2} MB/s", avg_speed);
-    {
+
+    let (peak_speed, min_speed) = {
         let monitor = speed_stats.lock().await;
         let (_, peak, min, _) = *monitor;
-        println!("Peak Speed: {:.2} MB/s", peak);
-        println!(
-            "Min Speed: {:.2} MB/s",
-            if min == f64::MAX { 0.0 } else { min }
-        );
-    }
+        (peak, if min == f64::MAX { 0.0 } else { min })
+    };
+
+    info!(
+        duration_secs = elapsed.as_secs_f64(),
+        avg_speed_mbps = avg_speed,
+        peak_speed_mbps = peak_speed,
+        min_speed_mbps = min_speed,
+        "Download complete"
+    );
+
     // INTEGRITY CHECK
-    println!("Verifying integrity...");
     let final_bytes = downloaded_bytes.load(Ordering::SeqCst);
     let final_completed = completed_chunks.load(Ordering::SeqCst);
 
-    println!("Completed chunks: {} / {}", final_completed, total_chunks);
-    println!(
-        "Downloaded bytes: {} / {} ({:.2}%)",
-        final_bytes,
-        total_size,
-        (final_bytes as f64 / total_size as f64) * 100.0
-    );
+    integrity::verify_download(final_bytes, total_size, final_completed, total_chunks)?;
 
-    if final_bytes < total_size {
-        return Err(format!(
-            "Download FAILED: {} / {} bytes ({} / {} chunks). Retry.",
-            final_bytes, total_size, final_completed, total_chunks
-        ));
-    }
-
-    println!("Integrity Check PASSED: 100%");
     let _ = app.emit("download-progress", total_size);
     Ok(format!("Done!"))
 }
+
 #[tauri::command]
-async fn get_file_details(url: String) -> Result<(String, u64), String> {
-    let client = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-        .build()
-        .map_err(|e| e.to_string())?;
+async fn get_file_details(url: String) -> Result<(String, u64), DownloadError> {
+    let client = client::create_client()?;
+
     // 1. Try HEAD request first
     let mut response = client.head(&url).send().await;
+
     // 2. Fallback to GET if HEAD was rejected
-    if response.is_err() || !response.as_ref().unwrap().status().is_success() {
-        println!("HEAD failed, trying GET for details...");
+    if response.is_err()
+        || !response
+            .as_ref()
+            .ok()
+            .map_or(false, |r| r.status().is_success())
+    {
+        debug!("HEAD request failed, falling back to GET with range header");
         response = client.get(&url).header(RANGE, "bytes=0-0").send().await;
     }
-    let response = response.map_err(|e| format!("Request failed: {}", e))?;
-    if !response.status().is_success() {
-        return Err(format!("Server returned error: {}", response.status()));
-    }
-    let size = response.content_length().unwrap_or(0);
 
-    let mut filename = "download.dat".to_string();
-    if let Some(disp) = response.headers().get(CONTENT_DISPOSITION) {
-        if let Ok(disp_str) = disp.to_str() {
-            if let Some(name_part) = disp_str.split("filename=").nth(1) {
-                filename = name_part
-                    .trim()
-                    .trim_matches('"')
-                    .trim_matches('\'')
-                    .to_string();
-            }
-        }
-    } else {
-        if let Ok(parsed_url) = url::Url::parse(&url) {
-            if let Some(segments) = parsed_url.path_segments() {
-                if let Some(last) = segments.last() {
-                    if !last.is_empty() {
-                        filename = last.to_string();
-                    }
-                }
-            }
-        }
+    let response = response.map_err(|e| DownloadError::Network(e.to_string()))?;
+    if !response.status().is_success() {
+        return Err(DownloadError::Config(format!(
+            "Server returned error: {}",
+            response.status()
+        )));
     }
+
+    let size = response.content_length().unwrap_or(0);
+    let filename = headers::extract_filename(&response, &url);
+
     Ok((filename, size))
 }
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize logger (console + file in dev, file only in prod)
+    if let Err(e) = logger::init_logger() {
+        eprintln!("Failed to initialize logger: {}", e);
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
