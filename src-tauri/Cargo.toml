@@ -8,7 +8,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [workspace]
-members = ["host"]
+members = ["host", "shared"]
 
 [lib]
 # The `_lib` suffix may seem redundant but it is necessary
@@ -39,6 +39,7 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # Error handling
 thiserror = "1.0"
+anyhow = "1.0"
 
 # Database
 rusqlite = { version = "0.32", features = ["bundled"] }
@@ -47,6 +48,10 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 uuid = { version = "1.11", features = ["v4", "serde"] }
 arboard = "3.4"
 notify-rust = "4.11"
+interprocess = "1.2.1"
+pirate-shared = { path = "shared" }
+sanitize-filename = "0.5.0"
+
 
 [dev-dependencies]
 tempfile = "3.8"

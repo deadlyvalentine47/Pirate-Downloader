@@ -42,5 +42,5 @@ pub fn extract_filename(response: &reqwest::Response, url: &str) -> String {
         }
     }
 
-    filename
+    sanitize_filename::sanitize(filename)
 }

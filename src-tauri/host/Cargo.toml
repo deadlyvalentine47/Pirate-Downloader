@@ -6,5 +6,7 @@ edition = "2021"
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-byteorder = "1.5" # Optional helper, but std is fine too. Let's use std for simplicity or byteorder if needed.
-# Actually std is sufficient for native messaging length prefix
+byteorder = "1.5"
+interprocess = "1.2.1"
+pirate-shared = { path = "../shared" }
+
