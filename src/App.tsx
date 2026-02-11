@@ -7,6 +7,7 @@ import { DownloadStatus } from "./components/download/DownloadStatus";
 import { ActionButtons } from "./components/download/ActionButtons";
 import { ProgressBar } from "./components/common/ProgressBar";
 import { HistoryList } from "./components/history/HistoryList";
+import { IPCConfirmation } from "./components/download/IPCConfirmation";
 import "./App.css";
 
 function App() {
@@ -52,6 +53,9 @@ function App() {
 
       {/* History */}
       <HistoryList history={history} />
+
+      {/* IPC Confirmation Modal */}
+      <IPCConfirmation />
     </main>
   );
 }

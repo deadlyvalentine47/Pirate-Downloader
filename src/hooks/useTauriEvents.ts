@@ -28,12 +28,19 @@ export const useTauriEvents = () => {
             setDownloadState(event.payload as any);
         });
 
+        // Listen for IPC confirmation requests
+        const unlistenConfirmation = listen<{ url: string, filename: string, size?: number }>('request-download-confirmation', (event) => {
+            // Set pending request to trigger modal
+            useDownloadStore.getState().setPendingRequest(event.payload);
+        });
+
         // Cleanup listeners on unmount
         return () => {
             unlistenProgress.then(f => f());
             unlistenStart.then(f => f());
             unlistenId.then(f => f());
             unlistenState.then(f => f());
+            unlistenConfirmation.then(f => f());
         };
     }, [setProgress, setTotalSize, setDownloadId, setDownloadState]);
 };

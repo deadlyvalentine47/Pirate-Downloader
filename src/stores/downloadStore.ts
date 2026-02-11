@@ -9,6 +9,9 @@ interface DownloadStore extends DownloadState {
     downloadId: string | null;
     downloadState: DownloadStateType;
 
+    // IPC Request State
+    pendingRequest: { url: string; filename: string; size?: number } | null;
+
     // Actions
     setUrl: (url: string) => void;
     setSavePath: (path: string) => void;
@@ -18,10 +21,15 @@ interface DownloadStore extends DownloadState {
     setThreads: (threads: number) => void;
     setDownloadId: (id: string | null) => void;
     setDownloadState: (state: DownloadStateType) => void;
+    setPendingRequest: (req: { url: string; filename: string; size?: number } | null) => void;
     reset: () => void;
 }
 
-const initialState: DownloadState & { downloadId: string | null; downloadState: DownloadStateType } = {
+const initialState: DownloadState & {
+    downloadId: string | null;
+    downloadState: DownloadStateType;
+    pendingRequest: { url: string; filename: string; size?: number } | null;
+} = {
     url: '',
     savePath: '',
     progress: 0,
@@ -30,6 +38,7 @@ const initialState: DownloadState & { downloadId: string | null; downloadState: 
     threads: 16,
     downloadId: null,
     downloadState: 'idle',
+    pendingRequest: null,
 };
 
 export const useDownloadStore = create<DownloadStore>((set) => ({
@@ -43,5 +52,6 @@ export const useDownloadStore = create<DownloadStore>((set) => ({
     setThreads: (threads) => set({ threads }),
     setDownloadId: (id) => set({ downloadId: id }),
     setDownloadState: (state) => set({ downloadState: state }),
+    setPendingRequest: (req) => set({ pendingRequest: req }),
     reset: () => set(initialState),
 }));

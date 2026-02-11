@@ -42,6 +42,61 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 // Listen for extension icon click (if no popup) or other events
+// Listen for extension icon click (if no popup) or other events
 chrome.runtime.onInstalled.addListener(() => {
     console.log("Pirate Downloader Extension Installed");
+
+    // Create Context Menu Items
+    chrome.contextMenus.create({
+        id: "download-link",
+        title: "Download Link with Pirate",
+        contexts: ["link"]
+    });
+
+    chrome.contextMenus.create({
+        id: "download-media",
+        title: "Download Media with Pirate",
+        contexts: ["image", "video", "audio"]
+    });
+
+    chrome.contextMenus.create({
+        id: "download-page",
+        title: "Download Page with Pirate",
+        contexts: ["page"]
+    });
 });
+
+// Handle Context Menu Clicks
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+    let url = "";
+    let filename = undefined;
+
+    if (info.menuItemId === "download-link") {
+        url = info.linkUrl;
+    } else if (info.menuItemId === "download-media") {
+        url = info.srcUrl;
+    } else if (info.menuItemId === "download-page") {
+        url = info.pageUrl;
+    }
+
+    if (url) {
+        console.log("Context Menu clicked:", info.menuItemId, url);
+
+        // Construct payload matching pirate-shared::DownloadRequest
+        const payload = {
+            url: url,
+            filename: filename, // Let backend/host determine or we can sniff
+            headers: {}, // TODO: Extract headers if possible via webRequest
+            referrer: info.pageUrl
+        };
+
+        sendToHost("DOWNLOAD_REQUEST", payload);
+    }
+});
+
+// Helper to send typed messages to Host
+function sendToHost(type, payload) {
+    if (!port) connectToHost();
+    console.log("Sending to host:", type, payload);
+    port.postMessage({ type: type, payload: payload });
+}
