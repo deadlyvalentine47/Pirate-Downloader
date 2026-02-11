@@ -280,7 +280,7 @@ pub async fn resume_download(
     let control_cloned = control.clone();
 
     tokio::spawn(async move {
-        match crate::run_download_task(
+        match crate::core::engine::DownloadEngine::start(
             app_handle,
             id_cloned.clone(),
             meta_cloned,

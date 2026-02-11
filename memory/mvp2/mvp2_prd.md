@@ -1,5 +1,17 @@
 # Pirate Downloader - MVP2 Product Requirements Document
 
+> [!CAUTION]
+> **STATUS: CLOSED / DEPRECATED** (2026-02-11)
+>
+> **Reason**: Strategic Pivot.
+> We determined that MVP2's feature roadmap was insufficient to rival market leaders like IDM.
+> The project is pivoting to **MVP3** with a focus on:
+> 1. **Browser Integration** (The "Hook")
+> 2. **Media Sniffing** (The "Moat")
+> 3. **Smart Link Refreshing** (The "Reliability")
+>
+> See `memory/mvp3/` for the new roadmap.
+
 ## Executive Summary
 
 Transform Pirate Downloader from a basic multi-threaded download tool into a **full-featured, production-ready download manager** that rivals IDM, Free Download Manager, and other industry leaders.

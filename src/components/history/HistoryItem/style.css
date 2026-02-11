@@ -1,0 +1,40 @@
+.history-item-container {
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+}
+
+.history-item-info {
+    /* Container for info */
+}
+
+.history-filename {
+    font-weight: bold;
+}
+
+.history-url {
+    font-size: 0.8em;
+    color: #666;
+    max-width: 400px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.history-status-container {
+    text-align: right;
+}
+
+.status-success {
+    color: green;
+}
+
+.status-failed {
+    color: red;
+}
+
+.history-size {
+    font-size: 0.8em;
+    color: #999;
+}

@@ -1,6 +1,7 @@
 // History List Component
-import type { HistoryItem as HistoryItemType } from '../../types';
-import { HistoryItem } from './HistoryItem';
+import type { HistoryItem as HistoryItemType } from '../../../types';
+import { HistoryItem } from '../HistoryItem';
+import './style.css';
 
 interface HistoryListProps {
     history: HistoryItemType[];
@@ -9,13 +10,13 @@ interface HistoryListProps {
 export const HistoryList = ({ history }: HistoryListProps) => {
     return (
         <>
-            <h2 style={{ marginTop: '30px' }}>📜 History</h2>
-            <div style={{ borderTop: '2px solid #eee' }}>
+            <h2 className="history-list-title">📜 History</h2>
+            <div className="history-list-container">
                 {history.map((item) => (
                     <HistoryItem key={item.id} item={item} />
                 ))}
                 {history.length === 0 && (
-                    <p style={{ color: '#888', textAlign: 'center', padding: '20px' }}>
+                    <p className="history-empty-message">
                         No downloads yet.
                     </p>
                 )}
