@@ -66,12 +66,68 @@ export const IPCConfirmation = () => {
         <ConfirmDialog
             open={!!pendingRequest}
             title="Download Request 🏴‍☠️"
-            message={`Do you want to download:\n${pendingRequest.filename}\n\nSize: ${displaySize}\n\nFrom:\n${pendingRequest.url.substring(0, 50)}...`}
+            message={
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <TruncatedRow label="File" value={pendingRequest.filename} color="#fff" />
+                    <div>
+                        <strong>Size:</strong>
+                        <div style={{ color: '#fff' }}>{displaySize}</div>
+                    </div>
+                    <TruncatedRow label="From" value={pendingRequest.url} color="#9ca3af" fontSize="0.9em" />
+                </div>
+            }
             confirmText="Download Now"
             cancelText="Cancel"
             onConfirm={handleConfirm}
             onCancel={handleCancel}
             variant="warning"
         />
+    );
+};
+
+const TruncatedRow = ({ label, value, color, fontSize = '1em' }: { label: string, value: string, color: string, fontSize?: string }) => {
+    const [copied, setCopied] = React.useState(false);
+
+    const handleCopy = () => {
+        navigator.clipboard.writeText(value);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    return (
+        <div>
+            <strong>{label}:</strong>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', maxWidth: '100%' }}>
+                <div
+                    style={{
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        color,
+                        fontSize,
+                        flex: 1,
+                        cursor: 'help'
+                    }}
+                    title={value}
+                >
+                    {value}
+                </div>
+                <button
+                    onClick={handleCopy}
+                    style={{
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '4px',
+                        fontSize: '1.1em',
+                        opacity: 0.7,
+                        transition: 'opacity 0.2s'
+                    }}
+                    title="Copy"
+                >
+                    {copied ? '✅' : '📋'}
+                </button>
+            </div>
+        </div>
     );
 };

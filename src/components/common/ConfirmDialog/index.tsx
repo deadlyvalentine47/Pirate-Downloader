@@ -4,7 +4,7 @@ import './style.css';
 interface ConfirmDialogProps {
     open: boolean;
     title: string;
-    message: string;
+    message: React.ReactNode;
     confirmText: string;
     cancelText: string;
     onConfirm: () => void;
@@ -35,9 +35,9 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
                 </h3>
 
                 {/* Message */}
-                <p className="confirm-dialog-message">
+                <div className="confirm-dialog-message">
                     {message}
-                </p>
+                </div>
 
                 {/* Buttons */}
                 <div className="confirm-dialog-actions">

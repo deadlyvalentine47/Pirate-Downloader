@@ -159,13 +159,36 @@ pub async fn fetch_file_details(url: &str) -> Result<(String, u64), DownloadErro
 
     let response = response.map_err(|e| DownloadError::Network(e.to_string()))?;
     if !response.status().is_success() {
-        return Err(DownloadError::Config(format!(
-            "Server returned error: {}",
-            response.status()
-        )));
+        // Allow 206 Partial Content as success
+        if response.status() != reqwest::StatusCode::PARTIAL_CONTENT {
+            return Err(DownloadError::Config(format!(
+                "Server returned error: {}",
+                response.status()
+            )));
+        }
     }
 
-    let size = response.content_length().unwrap_or(0);
+    // Try to get size from Content-Range first (if we did a Range request or server sent it)
+    // Format: bytes 0-0/12345
+    let mut size = 0;
+    if let Some(range_header) = response.headers().get("content-range") {
+        if let Ok(range_str) = range_header.to_str() {
+            if let Some(total_str) = range_str.split('/').last() {
+                if let Ok(total) = total_str.parse::<u64>() {
+                    size = total;
+                }
+            }
+        }
+    }
+
+    // Fallback to Content-Length if Content-Range didn't give us the total
+    // NOTE: If we did a Range request (bytes=0-0), Content-Length is 1.
+    // We only use Content-Length if we didn't get size from Range OR if the request wasn't a partial one (status 200).
+    // But if status is 200, Content-Range shouldn't imply total size differently than Content-Length usually.
+    if size == 0 {
+        size = response.content_length().unwrap_or(0);
+    }
+
     let filename = headers::extract_filename(&response, url);
 
     Ok((filename, size))

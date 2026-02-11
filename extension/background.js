@@ -100,3 +100,31 @@ function sendToHost(type, payload) {
     console.log("Sending to host:", type, payload);
     port.postMessage({ type: type, payload: payload });
 }
+
+// Intercept Downloads
+chrome.downloads.onCreated.addListener((downloadItem) => {
+    // specific checking to avoid loops or unwanted interceptions could go here
+    // For now, we intercept eveything that has a valid URL
+    if (downloadItem.state !== "in_progress" && downloadItem.state !== "interrupted") {
+        return;
+    }
+
+    console.log("Intercepting download:", downloadItem);
+
+    // Cancel the browser download immediately
+    chrome.downloads.cancel(downloadItem.id, () => {
+        if (chrome.runtime.lastError) {
+            console.error("Failed to cancel download:", chrome.runtime.lastError);
+        } else {
+            console.log("Browser download cancelled. Offloading to Pirate.");
+
+            // Send to Native Host
+            const payload = {
+                url: downloadItem.url,
+                filename: downloadItem.filename, // Might be empty/provisional
+                referrer: downloadItem.referrer
+            };
+            sendToHost("DOWNLOAD_REQUEST", payload);
+        }
+    });
+});

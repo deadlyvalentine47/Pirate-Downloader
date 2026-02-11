@@ -1,7 +1,7 @@
 use interprocess::local_socket::{LocalSocketListener, LocalSocketStream};
 use pirate_shared::{IpcMessage, IPC_NAME};
 use std::io::{BufRead, BufReader};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tracing::{error, info};
 
 pub fn init(app: AppHandle) {
@@ -115,6 +115,12 @@ async fn handle_download_request(
             "size": size
         }),
     )?;
+
+    // Bring App to Foreground
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
 
     Ok(())
 }
