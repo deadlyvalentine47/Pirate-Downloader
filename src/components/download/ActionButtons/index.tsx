@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { ConfirmDialog } from '../common/ConfirmDialog';
+import { ConfirmDialog } from '../../common/ConfirmDialog';
+import './style.css';
 
 interface ActionButtonsProps {
     downloadId: string;
@@ -77,42 +78,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
         setShowCancelDialog(false);
     };
 
-    // Button component with loading state
-    const Button: React.FC<{
-        onClick: () => void;
-        disabled: boolean;
-        variant: 'primary' | 'success' | 'warning' | 'danger';
-        children: React.ReactNode;
-        loading?: boolean;
-    }> = ({ onClick, disabled, variant, children, loading: isLoading }) => {
-        const baseStyle = {
-            padding: '8px 16px',
-            borderRadius: '4px',
-            border: 'none',
-            fontSize: '14px',
-            fontWeight: 500,
-            cursor: disabled ? 'not-allowed' : 'pointer',
-            opacity: disabled ? 0.5 : 1,
-            transition: 'all 0.2s',
-        };
 
-        const variantStyles = {
-            primary: { background: '#007acc', color: 'white' },
-            success: { background: '#28a745', color: 'white' },
-            warning: { background: '#ff9800', color: 'white' },
-            danger: { background: '#dc3545', color: 'white' },
-        };
-
-        return (
-            <button
-                onClick={onClick}
-                disabled={disabled}
-                style={{ ...baseStyle, ...variantStyles[variant] }}
-            >
-                {isLoading ? '...' : children}
-            </button>
-        );
-    };
 
     const isLoading = loading !== null;
 
@@ -120,31 +86,28 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
     if (state === 'active') {
         return (
             <>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                    <Button
+                <div className="action-buttons-container">
+                    <button
+                        className="action-btn btn-pause"
                         onClick={handlePause}
                         disabled={isLoading}
-                        variant="primary"
-                        loading={loading === 'pause'}
                     >
-                        ⏸️ Pause
-                    </Button>
-                    <Button
+                        {loading === 'pause' ? '...' : '⏸️ Pause'}
+                    </button>
+                    <button
+                        className="action-btn btn-stop"
                         onClick={handleStop}
                         disabled={isLoading}
-                        variant="warning"
-                        loading={loading === 'stop'}
                     >
-                        ⏹️ Stop
-                    </Button>
-                    <Button
+                        {loading === 'stop' ? '...' : '⏹️ Stop'}
+                    </button>
+                    <button
+                        className="action-btn btn-cancel"
                         onClick={handleCancelClick}
                         disabled={isLoading}
-                        variant="danger"
-                        loading={loading === 'cancel'}
                     >
-                        ❌ Cancel
-                    </Button>
+                        {loading === 'cancel' ? '...' : '❌ Cancel'}
+                    </button>
                 </div>
 
                 <ConfirmDialog
@@ -164,23 +127,21 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
     if (state === 'paused' || state === 'stopped') {
         return (
             <>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                    <Button
+                <div className="action-buttons-container">
+                    <button
+                        className="action-btn btn-resume"
                         onClick={handleResume}
                         disabled={isLoading}
-                        variant="success"
-                        loading={loading === 'resume'}
                     >
-                        ▶️ Resume
-                    </Button>
-                    <Button
+                        {loading === 'resume' ? '...' : '▶️ Resume'}
+                    </button>
+                    <button
+                        className="action-btn btn-cancel"
                         onClick={handleCancelClick}
                         disabled={isLoading}
-                        variant="danger"
-                        loading={loading === 'cancel'}
                     >
-                        ❌ Cancel
-                    </Button>
+                        {loading === 'cancel' ? '...' : '❌ Cancel'}
+                    </button>
                 </div>
 
                 <ConfirmDialog
@@ -200,23 +161,21 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
     if (state === 'failed') {
         return (
             <>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                    <Button
+                <div className="action-buttons-container">
+                    <button
+                        className="action-btn btn-resume"
                         onClick={handleResume}
                         disabled={isLoading}
-                        variant="primary"
-                        loading={loading === 'resume'}
                     >
-                        🔄 Retry
-                    </Button>
-                    <Button
+                        {loading === 'resume' ? '...' : '🔄 Retry'}
+                    </button>
+                    <button
+                        className="action-btn btn-cancel"
                         onClick={handleCancelClick}
                         disabled={isLoading}
-                        variant="danger"
-                        loading={loading === 'cancel'}
                     >
-                        ❌ Cancel
-                    </Button>
+                        {loading === 'cancel' ? '...' : '❌ Cancel'}
+                    </button>
                 </div>
 
                 <ConfirmDialog

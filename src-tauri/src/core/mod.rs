@@ -1,4 +1,4 @@
-/// Core download engine modules
+pub mod engine;
 pub mod error;
 pub mod integrity;
 pub mod persistence;

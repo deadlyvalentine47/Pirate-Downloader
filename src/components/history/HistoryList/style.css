@@ -1,0 +1,13 @@
+.history-list-title {
+    margin-top: 30px;
+}
+
+.history-list-container {
+    border-top: 2px solid #eee;
+}
+
+.history-empty-message {
+    color: #888;
+    text-align: center;
+    padding: 20px;
+}

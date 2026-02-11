@@ -7,6 +7,7 @@ import { DownloadStatus } from "./components/download/DownloadStatus";
 import { ActionButtons } from "./components/download/ActionButtons";
 import { ProgressBar } from "./components/common/ProgressBar";
 import { HistoryList } from "./components/history/HistoryList";
+import "./App.css";
 
 function App() {
   // Get state from stores
@@ -26,7 +27,7 @@ function App() {
   };
 
   return (
-    <main className="container" style={{ padding: "20px", fontFamily: "sans-serif", maxWidth: "800px", margin: "0 auto" }}>
+    <main className="app-container">
       <h1>🏴‍☠️ Pirate Downloader</h1>
 
       {/* Download Controls */}
@@ -37,7 +38,7 @@ function App() {
 
       {/* Action Buttons (Pause/Resume/Stop/Cancel) */}
       {downloadId && downloadState !== 'idle' && (
-        <div style={{ marginTop: '15px', textAlign: 'center' }}>
+        <div className="action-buttons-wrapper">
           <ActionButtons
             downloadId={downloadId}
             state={downloadState}

@@ -1,0 +1,43 @@
+.status-container {
+    text-align: center;
+    margin-top: 10px;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-left: 10px;
+}
+
+.badge-active {
+    background-color: #007acc;
+    color: white;
+}
+
+.badge-paused {
+    background-color: #ff9800;
+    color: white;
+}
+
+.badge-stopped {
+    background-color: #6c757d;
+    color: white;
+}
+
+.badge-completed {
+    background-color: #28a745;
+    color: white;
+}
+
+.badge-failed {
+    background-color: #dc3545;
+    color: white;
+}
+
+.badge-cancelled {
+    background-color: #6c757d;
+    color: white;
+}

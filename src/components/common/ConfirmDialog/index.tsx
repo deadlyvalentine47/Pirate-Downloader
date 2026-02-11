@@ -1,4 +1,5 @@
 import React from 'react';
+import './style.css';
 
 interface ConfirmDialogProps {
     open: boolean;
@@ -23,34 +24,32 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 }) => {
     if (!open) return null;
 
-    const confirmButtonClass = variant === 'danger'
-        ? 'bg-red-600 hover:bg-red-700 text-white'
-        : 'bg-orange-600 hover:bg-orange-700 text-white';
+    const confirmButtonClass = variant === 'danger' ? 'btn-danger' : 'btn-warning';
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-            <div className="bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+        <div className="confirm-dialog-overlay">
+            <div className="confirm-dialog-content">
                 {/* Title */}
-                <h3 className="text-xl font-semibold text-white mb-4">
+                <h3 className="confirm-dialog-title">
                     {title}
                 </h3>
 
                 {/* Message */}
-                <p className="text-gray-300 mb-6">
+                <p className="confirm-dialog-message">
                     {message}
                 </p>
 
                 {/* Buttons */}
-                <div className="flex gap-3 justify-end">
+                <div className="confirm-dialog-actions">
                     <button
                         onClick={onCancel}
-                        className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md transition-colors"
+                        className="btn-base btn-cancel"
                     >
                         {cancelText}
                     </button>
                     <button
                         onClick={onConfirm}
-                        className={`px-4 py-2 rounded-md transition-colors ${confirmButtonClass}`}
+                        className={`btn-base ${confirmButtonClass}`}
                     >
                         {confirmText}
                     </button>

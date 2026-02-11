@@ -1,7 +1,11 @@
 # MVP2 Active Tasks Tracker
 
-**Last Updated**: 2026-02-08
-**Current Phase**: Phase 1 - Core Download Features
+> [!WARNING]
+> **STATUS: ARCHIVED**
+> MVP2 is closed. All active tasks transferred to or re-evaluated in MVP3.
+
+**Last Updated**: 2026-02-11
+**Current Phase**: CLOSED
 
 ---
 
