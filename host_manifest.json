@@ -1,0 +1,9 @@
+{
+    "name": "com.piratedownloader.host",
+    "description": "Pirate Downloader Native Host",
+    "path": "D:\\Workspace\\PirateDownloader\\src-tauri\\target\\debug\\pirate-host.exe",
+    "type": "stdio",
+    "allowed_origins": [
+        "chrome-extension://lhdbnebckodlfkgbgngkngohhaehbifh/"
+    ]
+}

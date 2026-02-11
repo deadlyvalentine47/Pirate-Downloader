@@ -22,24 +22,46 @@ We are moving from a "Copy-Paste Downloader" to a "Browser Takeover Tool."
     *   **Click Interception**: Automatically catches `.exe`, `.zip`, `.iso`, `.mp4`, `.ts`, etc.
     *   **Media Sniffer**: Floating button when video stream detected.
 
+#### Technical Spec: Native Messaging Protocol
+Communication between Chrome Extension and Rust Host via `stdio`.
+**Message Schema (JSON):**
+```json
+{
+  "type": "DOWNLOAD_REQUEST",
+  "payload": {
+    "url": "https://example.com/file.zip",
+    "filename": "file.zip",
+    "headers": {
+      "Cookie": "session_id=...",
+      "User-Agent": "Mozilla/5.0..."
+    },
+    "referrer": "https://example.com/"
+  }
+}
+```
+
 ### 📹 2.2 Media Grabber (Priority 2)
 **The Moat**: 50% of users use IDM for video downloading.
 *   **Detection**:
     *   Extension monitors network traffic (webRequest API).
-    *   Detects `m3u8` playlists and `ts` segments.
+    *   Detects `m3u8` playlists and `ts` segments (MIME: `application/vnd.apple.mpegurl`, `video/mp2t`).
 *   **Processing**:
-    *   **Backend**: Need `ffmpeg` sidecar or Rust `m3u8-rs` + `reqwest` to download segments.
-    *   **Stitching**: Merge segments into `.mp4` automatically.
+    *   **Backend**: Use `m3u8-rs` to parse playlists.
+    *   **Download Engine**: Custom `HlsStrategy` in `DownloadEngine`.
+        *   Master Playlist -> Select Best Quality (Highest Bandwidth).
+        *   Media Playlist -> Download Segments (Concurrent).
+        *   Decryption -> Handle AES-128 keys if present.
+    *   **Stitching**: Merge segments into `.mp4` using `ffmpeg` (bundled sidecar).
 
 ### 🔄 2.3 Smart Link Refresh (Priority 3)
 **The Reliability**: "It just works"
 *   **Problem**: Links expire (403 Forbidden) during large downloads.
 *   **Solution**:
-    1.  Detect 403 error on chunk failure.
-    2.  Pause download.
-    3.  Popup: "Link Expired. Please visit download page."
-    4.  Extension captures NEW link for SAME file.
-    5.  Resume download with new authentication cookies.
+    1.  **Detection**: `DownloadEngine` receives 403 on chunk retry.
+    2.  **State Change**: Download State -> `WaitingForLink`.
+    3.  **UI Trigger**: Popup "Link Expired. Please visit download page."
+    4.  **Extension Logic**: When user visits original page, Extension captures NEW link for SAME file.
+    5.  **Resume**: Extension sends `LINK_UPDATE` message -> App updates URL/Cookies -> Resume.
 
 ## 3. UI/UX "Power Upgrade"
 
@@ -58,27 +80,51 @@ We need to move from "Clean & Simple" to **"Dense & Informative"**.
 ## 4. Technical Strategy
 
 ### 4.1 Integration Technology
-*   **Native Messaging**: Use `tauri-plugin-native-messaging` (if available) or raw stdin/stdout handling in a separate binary.
-*   **Protocol**: JSON-RPC over stdio.
+*   **Native Messaging**:
+    *   Use specific `allowed_origins` in manifest.
+    *   Rust Host: A separate binary `pirate-host` built from the same workspace.
+    *   IPC: `pirate-host` sends data to Main App via TCP (localhost) or Named Pipes.
 
 ### 4.2 HLS Engine
-*   **Library**: `hls_downloader` crate or custom impl using `m3u8-rs`.
+*   **Crates**:
+    *   `m3u8-rs`: Playlist parsing.
+    *   `aes`: Decryption.
 *   **FFmpeg**: Bundle `ffmpeg` static binary for final remuxing (safest bet for compatibility).
 
 ## 5. Development Phases
 
-### Phase 1: The Bridge (Week 1-2)
-*   Build minimal Chrome Extension.
-*   Implement Native Messaging in Rust.
-*   Send "Hello World" from Chrome to PirateDownloader.
+### Phase 1: The Bridge
+*   **Workspace Restructuring**:
+    *   Convert `src-tauri` into a Cargo Workspace.
+    *   Member 1: `pirate-app` (The main Tauri app).
+    *   Member 2: `pirate-host` (The Native Messaging Host).
+    *   Shared Lib: `pirate-core` (Shared types/logic if needed).
+*   **Chrome Extension**:
+    *   Manifest V3 with `nativeMessaging` permission.
+    *   Background script to handle `onDownloadCreated` (simulated interception).
+*   **Native Messaging Host (`pirate-host`)**:
+    *   Standard Input/Output (stdio) loop.
+    *   Protocol: Length-prefixed JSON (Chrome Native Messaging standard).
+    *   Installer: Script to register the host manifest (Registry on Windows).
+*   **Pipeline**:
+    *   Extension sends "Hello" -> Host echoes -> App logs event.
 
-### Phase 2: The Interceptor (Week 3)
-*   Extension intercepts generic downloads.
+### Phase 2: The Interceptor
+*   Extension intercepts generic downloads (`onDeterminingFilename`).
 *   App receives URL + Cookies + UserAgent.
+*   `DownloadEngine` supports "Cookies" header (currently missing).
 
-### Phase 3: The Sniffer (Week 4-5)
-*   Extension detects `.m3u8`.
-*   App implements basic HLS downloader.
+### Phase 3: The Sniffer (HLS)
+*   **Packet Analysis**:
+    *   Extension monitors `onBeforeRequest` for `.m3u8` and `.ts` MIME types.
+    *   Captures `REFERER` and `COOKIE` essential for HLS.
+*   **Core Implementation**:
+    *   `src-tauri/src/core/hls.rs`: New module using `m3u8-rs`.
+    *   Logic: Master Playlist -> Variety Selection -> Media Playlist -> Segment Queue.
+*   **Stitching**:
+    *   Download segments to temp folder.
+    *   Use `ffmpeg` sidecar to merge: `ffmpeg -i list.txt -c copy output.mp4`.
+    *   (Future: Native Rust muxing if feasible, but FFmpeg is MVP safe bet).
 
-### Phase 4: The Polymerization (Week 6)
+### Phase 4: The Polymerization
 *   Combine everything into "Power UI".
