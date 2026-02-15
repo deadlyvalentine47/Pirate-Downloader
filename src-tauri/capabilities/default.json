@@ -8,6 +8,23 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "dialog:default"
+    "dialog:default",
+    "shell:default",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "args": [
+            "-y",
+            "-i",
+            {"validator": ".*"},
+            "-c",
+            "copy",
+            {"validator": ".*"}
+          ],
+          "sidecar": "ffmpeg"
+        }
+      ]
+    }
   ]
 }

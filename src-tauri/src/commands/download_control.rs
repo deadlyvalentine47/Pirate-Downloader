@@ -1,5 +1,5 @@
 use crate::core::persistence::{delete_state, save_state};
-use crate::core::state::{DownloadMetadata, DownloadState};
+use crate::core::state::DownloadMetadata;
 use crate::core::strategy::http::HttpStrategy;
 use std::sync::Arc;
 /// Download control commands module
@@ -94,6 +94,12 @@ impl DownloadManager {
     pub async fn get_download(&self, id: &str) -> Option<DownloadMetadata> {
         let downloads = self.active_downloads.lock().await;
         downloads.get(id).cloned()
+    }
+
+    /// Get all active downloads
+    pub async fn get_all_downloads(&self) -> std::collections::HashMap<String, DownloadMetadata> {
+        let downloads = self.active_downloads.lock().await;
+        downloads.clone()
     }
 
     /// Update download metadata

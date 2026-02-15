@@ -5,7 +5,7 @@ use std::fs;
 ///
 /// This module handles serialization of download metadata to JSON files
 /// and provides utilities for managing state files.
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tracing::{debug, error, info, warn};
 
 /// Get the state file path for a given download file

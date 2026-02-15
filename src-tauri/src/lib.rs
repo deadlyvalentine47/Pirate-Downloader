@@ -31,6 +31,8 @@ async fn download_file(
     url: String,
     filepath: String,
     threads: u64,
+    headers: std::collections::HashMap<String, String>,
+    referrer: Option<String>,
     manager: tauri::State<'_, commands::DownloadManager>,
 ) -> Result<DownloadCommandResult, DownloadError> {
     let path = PathBuf::from(&filepath);
@@ -47,6 +49,8 @@ async fn download_file(
         filename_hint,
         threads,
         (*manager).clone(),
+        headers,
+        referrer,
     )
     .await
 }
@@ -60,6 +64,8 @@ pub async fn start_download(
     filename_hint: Option<String>,
     threads: u64,
     manager: commands::DownloadManager,
+    headers: std::collections::HashMap<String, String>,
+    referrer: Option<String>,
 ) -> Result<DownloadCommandResult, DownloadError> {
     // Generate unique download ID
     let download_id = uuid::Uuid::new_v4().to_string();
@@ -82,16 +88,18 @@ pub async fn start_download(
 
     // Strategy Selection
     let is_streaming = format::requires_ffmpeg(&url);
+    let mut final_total_size = total_size;
     
-    // If streaming, ensure we have a good extension
+    // If streaming, ensure we have a good extension and set size to 0 (unknown)
     if is_streaming {
         let ext = format::get_output_container(&url);
         let path = std::path::Path::new(&filepath_str);
         let new_path = path.with_extension(ext);
         filepath_str = new_path.to_string_lossy().to_string();
+        final_total_size = 0; // FFmpeg handles dynamic streams
     }
 
-    if !is_streaming && total_size < 1 {
+    if !is_streaming && final_total_size < 1 {
         // Warning log, but maybe proceed?
         // For sparse file allocation we NEED size.
         // MVP3 decision: Fail if no size, as per existing logic.
@@ -101,14 +109,14 @@ pub async fn start_download(
     }
 
     // CRITICAL: Tell Frontend the size AND download ID immediately
-    let _ = app.emit("download-start", total_size);
+    let _ = app.emit("download-start", final_total_size);
     let _ = app.emit("download-id", download_id.clone());
 
     tracing::info!(download_id = %download_id, filename = %final_filename, is_streaming = is_streaming, "Starting download");
 
     // 2. Allocator (Skip for streaming as ffmpeg handles its own output)
     if !is_streaming {
-        filesystem::allocate_sparse_file(std::path::Path::new(&filepath_str), total_size)?;
+        filesystem::allocate_sparse_file(std::path::Path::new(&filepath_str), final_total_size)?;
     }
 
     // 3. Register
@@ -118,15 +126,17 @@ pub async fn start_download(
         types::DEFAULT_THREADS
     } as u32;
     
-    let chunk_size = if is_streaming { 0 } else { filesystem::calculate_chunk_size(total_size) };
-    let total_chunks = if is_streaming { 0 } else { (total_size + chunk_size - 1) / chunk_size };
+    let chunk_size = if is_streaming { 0 } else { filesystem::calculate_chunk_size(final_total_size) };
+    let total_chunks = if is_streaming { 0 } else { (final_total_size + chunk_size - 1) / chunk_size };
 
     let metadata = state::DownloadMetadata {
         url: url.clone(),
         filepath: filepath_str,
-        total_size,
+        total_size: final_total_size,
         downloaded_bytes: 0,
         state: state::DownloadState::Active,
+        headers,
+        referrer,
         thread_count: actual_threads,
         completed_chunks: vec![],
         incomplete_chunks: if is_streaming { vec![] } else { (0..total_chunks).collect() },
@@ -168,6 +178,59 @@ pub async fn start_download(
 #[tauri::command]
 async fn get_file_details(url: String) -> Result<(String, u64), DownloadError> {
     fetch_file_details(&url).await
+}
+
+/// Fetches real filename and size with provided headers
+pub async fn fetch_file_details_with_headers(
+    url: &str,
+    headers: &std::collections::HashMap<String, String>,
+    referrer: Option<&str>,
+) -> Result<(String, u64), DownloadError> {
+    let client_builder = reqwest::Client::builder();
+    
+    // Build headers
+    let mut header_map = reqwest::header::HeaderMap::new();
+    for (k, v) in headers {
+        if let (Ok(name), Ok(val)) = (reqwest::header::HeaderName::from_bytes(k.as_bytes()), reqwest::header::HeaderValue::from_str(v)) {
+            header_map.insert(name, val);
+        }
+    }
+    
+    if let Some(r) = referrer {
+        if let Ok(val) = reqwest::header::HeaderValue::from_str(r) {
+            header_map.insert(reqwest::header::REFERER, val);
+        }
+    }
+
+    let client = client_builder.default_headers(header_map).build()
+        .map_err(|e| DownloadError::Network(e.to_string()))?;
+
+    // Use the same logic as fetch_file_details but with our custom client
+    let mut response = client.head(url).send().await;
+
+    if response.is_err() || !response.as_ref().map_or(false, |r| r.status().is_success()) {
+        response = client.get(url).header(RANGE, "bytes=0-0").send().await;
+    }
+
+    let response = response.map_err(|e| DownloadError::Network(e.to_string()))?;
+    
+    let mut size = 0;
+    if let Some(range_header) = response.headers().get("content-range") {
+        if let Ok(range_str) = range_header.to_str() {
+            if let Some(total_str) = range_str.split('/').last() {
+                if let Ok(total) = total_str.parse::<u64>() {
+                    size = total;
+                }
+            }
+        }
+    }
+
+    if size == 0 {
+        size = response.content_length().unwrap_or(0);
+    }
+
+    let filename = headers::extract_filename(&response, url);
+    Ok((filename, size))
 }
 
 /// Fetches real filename and size from the server
@@ -237,6 +300,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(download_manager)
         .setup(|app| {
