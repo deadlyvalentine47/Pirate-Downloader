@@ -14,11 +14,14 @@ use tracing::debug;
 
 // Module imports
 use core::error::DownloadError;
+use core::strategy::http::HttpStrategy;
+use core::strategy::ffmpeg::FfmpegStrategy;
+use core::strategy::DownloadStrategy;
 use core::{state, types};
 use network::{client, headers};
-use utils::{filesystem, logger};
+use utils::{filesystem, logger, format};
 // Import the struct from engine, do NOT redefine it
-use core::engine::DownloadCommandResult;
+use crate::commands::DownloadCommandResult;
 
 // REMOVED DUPLICATE STRUCT DEFINITION
 
@@ -75,9 +78,20 @@ pub async fn start_download(
     };
 
     let filepath = target_dir.join(&final_filename);
-    let filepath_str = filepath.to_string_lossy().to_string();
+    let mut filepath_str = filepath.to_string_lossy().to_string();
 
-    if total_size < 1 {
+    // Strategy Selection
+    let is_streaming = format::requires_ffmpeg(&url);
+    
+    // If streaming, ensure we have a good extension
+    if is_streaming {
+        let ext = format::get_output_container(&url);
+        let path = std::path::Path::new(&filepath_str);
+        let new_path = path.with_extension(ext);
+        filepath_str = new_path.to_string_lossy().to_string();
+    }
+
+    if !is_streaming && total_size < 1 {
         // Warning log, but maybe proceed?
         // For sparse file allocation we NEED size.
         // MVP3 decision: Fail if no size, as per existing logic.
@@ -90,10 +104,12 @@ pub async fn start_download(
     let _ = app.emit("download-start", total_size);
     let _ = app.emit("download-id", download_id.clone());
 
-    tracing::info!(download_id = %download_id, filename = %final_filename, size_mb = total_size / (1024 * 1024), "Starting download");
+    tracing::info!(download_id = %download_id, filename = %final_filename, is_streaming = is_streaming, "Starting download");
 
-    // 2. Allocator
-    filesystem::allocate_sparse_file(&filepath, total_size)?;
+    // 2. Allocator (Skip for streaming as ffmpeg handles its own output)
+    if !is_streaming {
+        filesystem::allocate_sparse_file(std::path::Path::new(&filepath_str), total_size)?;
+    }
 
     // 3. Register
     let actual_threads = if threads > 0 {
@@ -101,8 +117,9 @@ pub async fn start_download(
     } else {
         types::DEFAULT_THREADS
     } as u32;
-    let chunk_size = filesystem::calculate_chunk_size(total_size);
-    let total_chunks = (total_size + chunk_size - 1) / chunk_size;
+    
+    let chunk_size = if is_streaming { 0 } else { filesystem::calculate_chunk_size(total_size) };
+    let total_chunks = if is_streaming { 0 } else { (total_size + chunk_size - 1) / chunk_size };
 
     let metadata = state::DownloadMetadata {
         url: url.clone(),
@@ -112,7 +129,7 @@ pub async fn start_download(
         state: state::DownloadState::Active,
         thread_count: actual_threads,
         completed_chunks: vec![],
-        incomplete_chunks: (0..total_chunks).collect(),
+        incomplete_chunks: if is_streaming { vec![] } else { (0..total_chunks).collect() },
         created_at: chrono::Utc::now(),
         paused_at: None,
         resumed_at: None,
@@ -130,8 +147,22 @@ pub async fn start_download(
         .await;
 
     // 4. Run Loop (Delegated to Engine)
-    core::engine::DownloadEngine::start(app, download_id, metadata, download_control, manager, 0)
-        .await
+    let strategy: Box<dyn DownloadStrategy> = if is_streaming {
+        Box::new(FfmpegStrategy)
+    } else {
+        Box::new(HttpStrategy)
+    };
+
+    core::engine::DownloadEngine::start(
+        app,
+        download_id,
+        metadata,
+        download_control,
+        manager,
+        0, // generation
+        strategy,
+    )
+    .await
 }
 
 #[tauri::command]

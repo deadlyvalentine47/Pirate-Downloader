@@ -7,7 +7,8 @@
         "nativeMessaging",
         "activeTab",
         "downloads",
-        "contextMenus"
+        "contextMenus",
+        "webRequest"
     ],
     "background": {
         "service_worker": "background.js"

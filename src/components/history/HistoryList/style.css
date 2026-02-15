@@ -1,13 +1,42 @@
-.history-list-title {
+.history-section {
     margin-top: 30px;
+    width: 100%;
 }
 
-.history-list-container {
-    border-top: 2px solid #eee;
+.history-list-title {
+    font-size: 1.4em;
+    margin-bottom: 15px;
+    color: #e2e8f0;
+}
+
+.history-table-container {
+    background: #1e293b;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #334155;
+}
+
+.history-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 0.9em;
+}
+
+.history-table th {
+    background: #0f172a;
+    padding: 12px;
+    color: #94a3b8;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75em;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid #334155;
 }
 
 .history-empty-message {
-    color: #888;
+    color: #64748b;
     text-align: center;
-    padding: 20px;
+    padding: 40px;
+    font-style: italic;
 }

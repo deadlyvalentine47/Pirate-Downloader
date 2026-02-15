@@ -7,20 +7,33 @@ interface HistoryItemProps {
 }
 
 export const HistoryItem = ({ item }: HistoryItemProps) => {
+    const formatDate = (dateStr?: string) => {
+        if (!dateStr) return '-';
+        const date = new Date(dateStr);
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    };
+
     return (
-        <div className="history-item-container">
-            <div className="history-item-info">
+        <tr className="history-row">
+            <td className="history-cell-name" title={item.url}>
                 <div className="history-filename">{item.filename}</div>
-                <div className="history-url">{item.url}</div>
-            </div>
-            <div className="history-status-container">
-                <div className={item.status === 'Success' ? 'status-success' : 'status-failed'}>
+                <div className="history-url-sub">{item.url}</div>
+            </td>
+            <td className="history-cell-status">
+                <span className={`status-badge ${item.status.toLowerCase()}`}>
                     {item.status}
-                </div>
-                <div className="history-size">
-                    {item.size > 0 ? (item.size / 1024 / 1024).toFixed(1) + ' MB' : ''}
-                </div>
-            </div>
-        </div>
+                </span>
+            </td>
+            <td className="history-cell-size">
+                {item.size > 0 ? (item.size / 1024 / 1024).toFixed(1) + ' MB' : 'Unknown'}
+            </td>
+            <td className="history-cell-date">
+                {formatDate(item.timestamp)}
+            </td>
+            <td className="history-cell-actions">
+                <button className="action-btn-mini" title="Open Folder">📂</button>
+                <button className="action-btn-mini" title="Redownload">🔄</button>
+            </td>
+        </tr>
     );
 };

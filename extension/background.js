@@ -128,3 +128,27 @@ chrome.downloads.onCreated.addListener((downloadItem) => {
         }
     });
 });
+
+// Media Sniffer (HLS/DASH)
+chrome.webRequest.onBeforeRequest.addListener(
+    (details) => {
+        if (details.method !== "GET") return;
+        
+        const url = details.url.split('?')[0];
+        if (url.endsWith(".m3u8") || url.endsWith(".mpd")) {
+            console.log("Media stream detected:", details.url);
+            
+            // In a full implementation, we'd show a "Download Video" button in the page
+            // For MVP, we'll just log it and potentially send a notification or 
+            // wait for user to use context menu.
+            // OPTIONAL: Auto-prompt for high-priority streams
+            /*
+            sendToHost("MEDIA_DETECTED", {
+                url: details.url,
+                type: url.endsWith(".m3u8") ? "HLS" : "DASH"
+            });
+            */
+        }
+    },
+    { urls: ["<all_urls>"] }
+);
