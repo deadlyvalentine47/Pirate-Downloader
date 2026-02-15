@@ -26,7 +26,9 @@ export const IPCConfirmation = () => {
             invoke<{ status: string }>('download_file', {
                 url: pendingRequest.url,
                 filepath: fullPath,
-                threads: 16 // Default
+                threads: 16, // Default
+                headers: pendingRequest.headers || {},
+                referrer: pendingRequest.referrer || null
             }).then(() => {
                 setStatus('Finished');
                 addItem(pendingRequest.url, fullPath, 0, 'Success');
@@ -63,7 +65,7 @@ export const IPCConfirmation = () => {
     const isStreaming = pendingRequest?.url.toLowerCase().includes('.m3u8') || 
                       pendingRequest?.url.toLowerCase().includes('.mpd');
 
-    const displaySize = isStreaming ? 'Stream (Unknown)' : formatSize(pendingRequest?.size);
+    const displaySize = isStreaming ? 'Stream (Unknown)' : formatSize(pendingRequest.size);
 
     return (
         <ConfirmDialog

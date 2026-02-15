@@ -62,6 +62,12 @@ impl DownloadStrategy for HttpStrategy {
         let start_time = std::time::Instant::now();
         let mut handles = vec![];
 
+        let chunk_size_cloned = chunk_size;
+        let total_size_cloned = total_size;
+        let total_chunks_cloned = total_chunks;
+        let manager_cloned = context.manager.clone();
+        let download_id_cloned = context.download_id.clone();
+
         for _ in 0..actual_threads {
             let url = url.clone();
             let path = filepath.clone();
@@ -73,6 +79,12 @@ impl DownloadStrategy for HttpStrategy {
             let worker_downloaded = downloaded_bytes.clone();
             let worker_completed = completed_chunks.clone();
             let generation = context.generation;
+            
+            let chunk_size = chunk_size_cloned;
+            let total_size = total_size_cloned;
+            let total_chunks = total_chunks_cloned;
+            let manager = manager_cloned.clone();
+            let download_id = download_id_cloned.clone();
 
             let handle = tokio::spawn(async move {
                 let client = client::create_worker_client();
@@ -155,6 +167,28 @@ impl DownloadStrategy for HttpStrategy {
                             .send()
                             .await
                         {
+                            if response.status() == reqwest::StatusCode::FORBIDDEN {
+                                warn!(
+                                    chunk_id = idx,
+                                    "Received 403 Forbidden. Link likely expired. Triggering WaitingForLink state."
+                                );
+                                // Signal all workers to stop
+                                control.signal.store(1, Ordering::SeqCst); // 1 = Paused/Stopped
+                                
+                                let app_handle_err = app_handle.clone();
+                                let manager_err = manager.clone();
+                                let download_id_err = download_id.clone();
+                                
+                                tokio::spawn(async move {
+                                    if let Some(mut meta) = manager_err.get_download(&download_id_err).await {
+                                        meta.wait_for_link();
+                                        manager_err.update_download(&download_id_err, meta).await;
+                                        let _ = app_handle_err.emit("download-state", "waitingforlink");
+                                    }
+                                });
+                                break;
+                            }
+
                             if response.status().is_success() {
                                 if writer.seek(SeekFrom::Start(start)).await.is_ok() {
                                     let mut chunk_ok = true;

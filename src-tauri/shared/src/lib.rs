@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 pub enum IpcMessage {
     /// Request to start a download
     DownloadRequest(DownloadRequest),
+    /// Update URL for an existing download (Link Refresh)
+    LinkUpdate(DownloadRequest),
     /// Simple ping to check if server is alive
     Ping,
 }

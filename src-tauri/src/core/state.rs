@@ -23,12 +23,14 @@ pub enum DownloadState {
     Failed,
     /// Download was cancelled by user (cleanup performed)
     Cancelled,
+    /// Download link expired, waiting for user to visit page and refresh (IDM style)
+    WaitingForLink,
 }
 
 impl DownloadState {
     /// Check if download can be resumed from this state
     pub fn can_resume(&self) -> bool {
-        matches!(self, DownloadState::Paused | DownloadState::Stopped)
+        matches!(self, DownloadState::Paused | DownloadState::Stopped | DownloadState::WaitingForLink)
     }
 
     /// Check if download is in a terminal state (no further action possible)
@@ -62,6 +64,12 @@ pub struct DownloadMetadata {
 
     /// Current download state
     pub state: DownloadState,
+
+    /// Request headers
+    pub headers: std::collections::HashMap<String, String>,
+
+    /// Referrer URL
+    pub referrer: Option<String>,
 
     /// Number of threads used for download
     pub thread_count: u32,
@@ -100,6 +108,8 @@ impl DownloadMetadata {
             total_size,
             downloaded_bytes: 0,
             state: DownloadState::Pending,
+            headers: std::collections::HashMap::new(),
+            referrer: None,
             thread_count,
             completed_chunks: Vec::new(),
             incomplete_chunks: Vec::new(),
@@ -154,6 +164,12 @@ impl DownloadMetadata {
     /// Mark download as cancelled
     pub fn cancel(&mut self) {
         self.state = DownloadState::Cancelled;
+    }
+
+    /// Mark download as waiting for a new link
+    pub fn wait_for_link(&mut self) {
+        self.state = DownloadState::WaitingForLink;
+        self.paused_at = Some(Utc::now());
     }
 }
 

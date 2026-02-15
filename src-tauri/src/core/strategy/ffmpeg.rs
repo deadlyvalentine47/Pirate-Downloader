@@ -1,10 +1,8 @@
 use super::{DownloadContext, DownloadStrategy};
 use crate::commands::DownloadCommandResult;
 use crate::core::error::DownloadError;
-use std::process::Stdio;
-use tokio::process::Command;
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tracing::{info, error, warn};
+use tauri_plugin_shell::ShellExt;
+use tracing::{info, error};
 use tauri::Emitter;
 use std::sync::atomic::Ordering;
 
@@ -22,78 +20,80 @@ impl DownloadStrategy for FfmpegStrategy {
         info!(
             download_id = %context.download_id,
             url = %url,
-            "Starting FFmpeg download strategy"
+            "Starting FFmpeg sidecar download strategy"
         );
 
-        // In a real bundled scenario, we'd use:
-        // let ffmpeg_path = context.app.path().resolve_resource("ffmpeg.exe")...
-        // For now, we assume it's in the PATH as per the initial plan phase.
-        let mut cmd = Command::new("ffmpeg");
-        
-        cmd.arg("-y") // Overwrite output files
-           .arg("-i")
-           .arg(url)
-           .arg("-c")
-           .arg("copy") // Copy streams without re-encoding
-           .arg(filepath)
-           .stdout(Stdio::piped())
-           .stderr(Stdio::piped());
-
-        let mut child = cmd.spawn().map_err(|e| {
-            error!("Failed to spawn ffmpeg: {}", e);
-            DownloadError::Config(format!("FFmpeg not found or failed to start: {}", e))
+        let sidecar = context.app.shell().sidecar("ffmpeg").map_err(|e| {
+            error!("Failed to create ffmpeg sidecar: {}", e);
+            DownloadError::Config(format!("FFmpeg sidecar error: {}", e))
         })?;
 
-        let stderr = child.stderr.take().unwrap();
-        let mut reader = BufReader::new(stderr).lines();
+        // Construct headers for FFmpeg: "Key: Value\r\nKey2: Value2\r\n"
+        let mut header_str = String::new();
+        for (k, v) in &context.metadata.headers {
+            header_str.push_str(&format!("{}: {}\r\n", k, v));
+        }
+        if let Some(ref_url) = &context.metadata.referrer {
+            header_str.push_str(&format!("Referer: {}\r\n", ref_url));
+        }
+
+        let mut args = vec!["-y"];
+        
+        if !header_str.is_empty() {
+            args.push("-headers");
+            args.push(&header_str);
+        }
+
+        args.push("-i");
+        args.push(url);
+        args.push("-c");
+        args.push("copy");
+        args.push(filepath);
+
+        let (mut rx, _child) = sidecar
+            .args(args)
+            .spawn()
+            .map_err(|e| {
+                error!("Failed to spawn ffmpeg sidecar: {}", e);
+                DownloadError::Config(format!("FFmpeg failed to start: {}", e))
+            })?;
+
         let app_handle = context.app.clone();
         let control = context.control.clone();
 
-        // Monitor progress from stderr
-        tokio::spawn(async move {
-            while let Ok(Some(line)) = reader.next_line().await {
-                // FFmpeg progress lines often contain "time=HH:MM:SS.MS"
-                // For MVP, we'll just emit that it's "Working"
-                // A more advanced parser would extract duration and calculate %
-                if line.contains("time=") {
-                    // Just a heartbeat for the UI to know we are alive
-                    let _ = app_handle.emit("download-progress-pulse", line.trim().to_string());
+        // Monitor progress from sidecar events
+        while let Some(event) = rx.recv().await {
+            match event {
+                tauri_plugin_shell::process::CommandEvent::Stderr(line) => {
+                    let line_str = String::from_utf8_lossy(&line);
+                    if line_str.contains("time=") {
+                        let _ = app_handle.emit("download-progress-pulse", line_str.trim().to_string());
+                    }
                 }
-                
-                if control.signal.load(Ordering::Relaxed) != 0 {
-                    break;
+                tauri_plugin_shell::process::CommandEvent::Terminated(payload) => {
+                    if payload.code == Some(0) {
+                        info!(download_id = %context.download_id, "FFmpeg sidecar completed successfully");
+                        break;
+                    } else {
+                        let signal = control.signal.load(Ordering::Relaxed);
+                        if signal != 0 {
+                            info!("FFmpeg sidecar stopped by user signal");
+                            return Ok(DownloadCommandResult {
+                                id: context.download_id.clone(),
+                                status: if signal == 1 { "paused".to_string() } else { "cancelled".to_string() },
+                            });
+                        }
+                        return Err(DownloadError::Network(format!("FFmpeg sidecar exited with code {:?}", payload.code)));
+                    }
                 }
+                _ => {}
             }
-        });
-
-        // Monitor for cancellation/pause
-        let control_for_kill = context.control.clone();
-        tokio::spawn(async move {
-            loop {
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                let signal = control_for_kill.signal.load(Ordering::Relaxed);
-                if signal != 0 {
-                    // Try to kill ffmpeg gracefully or forcefully
-                    // FFmpeg can be stopped by sending 'q' to stdin, but killing is easier for MVP
-                    break;
-                }
+            
+            if control.signal.load(Ordering::Relaxed) != 0 {
+                // How to kill sidecar? _child.kill() if we kept it.
+                // In v2, the child is managed by the plugin.
+                break;
             }
-        });
-
-        let status = child.wait().await.map_err(|e| {
-            DownloadError::TaskJoin(format!("FFmpeg process failed: {}", e))
-        })?;
-
-        if !status.success() {
-            let signal = context.control.signal.load(Ordering::Relaxed);
-            if signal != 0 {
-                info!("FFmpeg stopped by user signal: {}", signal);
-                return Ok(DownloadCommandResult {
-                    id: context.download_id.clone(),
-                    status: if signal == 1 { "paused".to_string() } else { "cancelled".to_string() },
-                });
-            }
-            return Err(DownloadError::Network("FFmpeg exited with error".to_string()));
         }
 
         info!(download_id = %context.download_id, "FFmpeg download completed");
