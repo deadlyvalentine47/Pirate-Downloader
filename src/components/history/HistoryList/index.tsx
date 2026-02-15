@@ -9,18 +9,32 @@ interface HistoryListProps {
 
 export const HistoryList = ({ history }: HistoryListProps) => {
     return (
-        <>
-            <h2 className="history-list-title">📜 History</h2>
-            <div className="history-list-container">
-                {history.map((item) => (
-                    <HistoryItem key={item.id} item={item} />
-                ))}
-                {history.length === 0 && (
+        <div className="history-section">
+            <h2 className="history-list-title">📜 Download History</h2>
+            <div className="history-table-container">
+                {history.length > 0 ? (
+                    <table className="history-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Status</th>
+                                <th>Size</th>
+                                <th>Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {history.map((item) => (
+                                <HistoryItem key={item.id} item={item} />
+                            ))}
+                        </tbody>
+                    </table>
+                ) : (
                     <p className="history-empty-message">
-                        No downloads yet.
+                        No downloads yet. Your plunder will appear here.
                     </p>
                 )}
             </div>
-        </>
+        </div>
     );
 };

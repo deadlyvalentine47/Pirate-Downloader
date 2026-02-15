@@ -1,6 +1,6 @@
-// use crate::core::error::DownloadError;
 use crate::core::persistence::{delete_state, save_state};
 use crate::core::state::{DownloadMetadata, DownloadState};
+use crate::core::strategy::http::HttpStrategy;
 use std::sync::Arc;
 /// Download control commands module
 ///
@@ -280,6 +280,7 @@ pub async fn resume_download(
     let control_cloned = control.clone();
 
     tokio::spawn(async move {
+        let strategy = Box::new(HttpStrategy);
         match crate::core::engine::DownloadEngine::start(
             app_handle,
             id_cloned.clone(),
@@ -287,6 +288,7 @@ pub async fn resume_download(
             control_cloned,
             manager_cloned,
             generation,
+            strategy,
         )
         .await
         {

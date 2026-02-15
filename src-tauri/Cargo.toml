@@ -51,6 +51,7 @@ notify-rust = "4.11"
 interprocess = "1.2.1"
 pirate-shared = { path = "shared" }
 sanitize-filename = "0.5.0"
+async-trait = "0.1"
 
 
 [dev-dependencies]

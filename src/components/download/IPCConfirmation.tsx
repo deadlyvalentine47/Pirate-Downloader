@@ -60,7 +60,10 @@ export const IPCConfirmation = () => {
         return `${size.toFixed(2)} ${units[unitIndex]}`;
     };
 
-    const displaySize = formatSize(pendingRequest.size);
+    const isStreaming = pendingRequest?.url.toLowerCase().includes('.m3u8') || 
+                      pendingRequest?.url.toLowerCase().includes('.mpd');
+
+    const displaySize = isStreaming ? 'Stream (Unknown)' : formatSize(pendingRequest?.size);
 
     return (
         <ConfirmDialog
@@ -68,7 +71,19 @@ export const IPCConfirmation = () => {
             title="Download Request 🏴‍☠️"
             message={
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <TruncatedRow label="File" value={pendingRequest.filename} color="#fff" />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <TruncatedRow label="File" value={pendingRequest.filename} color="#fff" />
+                        {isStreaming && (
+                            <span style={{ 
+                                background: '#7c3aed', 
+                                color: '#fff', 
+                                padding: '2px 8px', 
+                                borderRadius: '4px', 
+                                fontSize: '0.7em',
+                                fontWeight: 'bold'
+                            }}>STREAM</span>
+                        )}
+                    </div>
                     <div>
                         <strong>Size:</strong>
                         <div style={{ color: '#fff' }}>{displaySize}</div>
