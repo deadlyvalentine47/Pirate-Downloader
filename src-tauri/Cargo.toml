@@ -31,6 +31,7 @@ tokio = { version = "1", features = ["full", "fs"] }
 futures-util = "0.3"
 tauri-plugin-dialog = "2"
 url = "2"
+bytes = "1"
 
 # Logging
 tracing = "0.1"
