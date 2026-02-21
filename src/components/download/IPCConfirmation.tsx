@@ -33,7 +33,9 @@ export const IPCConfirmation = () => {
                 setStatus('Finished');
                 addItem(pendingRequest.url, fullPath, 0, 'Success');
             }).catch(e => {
-                setStatus('Error: ' + e);
+                const errorMsg = typeof e === 'object' ? JSON.stringify(e) : String(e);
+                console.error('Download Error:', e);
+                setStatus('Error: ' + errorMsg);
                 addItem(pendingRequest.url, fullPath, 0, 'Failed');
             });
 

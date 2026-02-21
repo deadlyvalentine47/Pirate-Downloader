@@ -44,3 +44,20 @@ pub fn extract_filename(response: &reqwest::Response, url: &str) -> String {
 
     sanitize_filename::sanitize(filename)
 }
+
+/// Extracts filename from URL path segments
+pub fn extract_filename_from_url(url: &str) -> String {
+    let mut filename = "download.dat".to_string();
+
+    if let Ok(parsed_url) = url::Url::parse(url) {
+        if let Some(segments) = parsed_url.path_segments() {
+            if let Some(last) = segments.last() {
+                if !last.is_empty() {
+                    filename = last.to_string();
+                }
+            }
+        }
+    }
+
+    sanitize_filename::sanitize(filename)
+}

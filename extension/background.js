@@ -96,7 +96,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendToHost("DOWNLOAD_REQUEST", {
             url: request.url,
             filename: request.filename,
-            referrer: sender.url || ""
+            referrer: request.referrer || sender.url || ""
         });
         sendResponse({ success: true });
     }

@@ -13,7 +13,7 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, Env
 /// Log file location: %APPDATA%/PirateDownloader/logs/
 /// Log file naming: pirate-downloader-YYYY-MM-DD.log
 /// Rotation: Daily or when file reaches 10MB
-pub fn init_logger() -> Result<(), Box<dyn std::error::Error>> {
+pub fn init_logger() -> Result<tracing_appender::non_blocking::WorkerGuard, Box<dyn std::error::Error>> {
     // Determine log directory
     let log_dir = get_log_directory()?;
 
@@ -22,7 +22,7 @@ pub fn init_logger() -> Result<(), Box<dyn std::error::Error>> {
 
     // Set up file appender with daily rotation
     let file_appender = tracing_appender::rolling::daily(&log_dir, "pirate-downloader.log");
-    let (non_blocking_file, _guard) = tracing_appender::non_blocking(file_appender);
+    let (non_blocking_file, guard) = tracing_appender::non_blocking(file_appender);
 
     // Determine log level based on build type
     #[cfg(debug_assertions)]
@@ -65,7 +65,7 @@ pub fn init_logger() -> Result<(), Box<dyn std::error::Error>> {
     // Log initialization message
     tracing::info!("Logger initialized - log directory: {}", log_dir.display());
 
-    Ok(())
+    Ok(guard)
 }
 
 /// Get the log directory path
