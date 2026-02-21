@@ -9,13 +9,25 @@
     "core:default",
     "opener:default",
     "dialog:default",
-    "shell:default",
+    "shell:allow-spawn",
     {
       "identifier": "shell:allow-execute",
       "allow": [
         {
           "args": [
             "-y",
+            "-user_agent",
+            {"validator": ".*"},
+            "-referer",
+            {"validator": ".*"},
+            "-protocol_whitelist",
+            "file,http,https,tcp,tls,crypto,data",
+            "-headers",
+            {"validator": ".*"},
+            "-f",
+            "hls",
+            "-allowed_extensions",
+            "all",
             "-i",
             {"validator": ".*"},
             "-c",

@@ -186,6 +186,13 @@ pub async fn fetch_file_details_with_headers(
     headers: &std::collections::HashMap<String, String>,
     referrer: Option<&str>,
 ) -> Result<(String, u64), DownloadError> {
+    // 0. If it's a streaming manifest, don't even try to fetch size/details via HTTP HEAD/GET
+    // This avoids the '2 bytes' bug and unnecessary network calls.
+    if format::requires_ffmpeg(url) {
+        let filename = headers::extract_filename_from_url(url);
+        return Ok((filename, 0));
+    }
+
     let client_builder = reqwest::Client::builder();
     
     // Build headers
@@ -291,9 +298,14 @@ pub async fn fetch_file_details(url: &str) -> Result<(String, u64), DownloadErro
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize logger (console + file in dev, file only in prod)
-    if let Err(e) = logger::init_logger() {
-        eprintln!("Failed to initialize logger: {}", e);
-    }
+    // We keep the guard alive for the duration of the program
+    let _log_guard = match logger::init_logger() {
+        Ok(g) => Some(g),
+        Err(e) => {
+            eprintln!("Failed to initialize logger: {}", e);
+            None
+        }
+    };
 
     // Initialize download manager
     let download_manager = commands::DownloadManager::new();

@@ -52,13 +52,19 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const downloadMedia = (url, filename) => {
-        chrome.runtime.sendMessage({ 
-            type: "DOWNLOAD_MEDIA", 
-            url: url, 
-            filename: filename 
-        }, (response) => {
-            status.textContent = "Sent to app!";
-            setTimeout(() => status.textContent = "Ready", 2000);
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            const activeTab = tabs[0];
+            const referrer = activeTab ? activeTab.url : "";
+
+            chrome.runtime.sendMessage({ 
+                type: "DOWNLOAD_MEDIA", 
+                url: url, 
+                filename: filename,
+                referrer: referrer
+            }, (response) => {
+                status.textContent = "Sent to app!";
+                setTimeout(() => status.textContent = "Ready", 2000);
+            });
         });
     };
 
