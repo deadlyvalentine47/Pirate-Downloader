@@ -50,18 +50,37 @@ impl DownloadStrategy for HlsStrategy {
         }
 
         // 2. Fetch and Parse Manifest
-        debug!(download_id = %context.download_id, "Fetching manifest");
+        debug!(download_id = %context.download_id, "Fetching manifest from: {}", url);
         let manifest_resp = client
             .get(url)
             .headers(header_map.clone())
             .send()
-            .await
-            .map_err(|e| DownloadError::Network(format!("Failed to fetch manifest: {}", e)))?;
+            .await;
 
+        let manifest_resp = match manifest_resp {
+            Ok(resp) => {
+                if !resp.status().is_success() {
+                    error!(download_id = %context.download_id, status = %resp.status(), "Manifest fetch returned non-success status");
+                    return Err(DownloadError::Network(format!("Server returned status: {}", resp.status())));
+                }
+                resp
+            },
+            Err(e) => {
+                error!(download_id = %context.download_id, error = %e, "Failed to send manifest request");
+                return Err(DownloadError::Network(format!("Failed to fetch manifest: {}", e)));
+            }
+        };
+
+        debug!(download_id = %context.download_id, "Reading manifest text");
         let manifest_text = manifest_resp
             .text()
             .await
-            .map_err(|e| DownloadError::Network(format!("Failed to read manifest: {}", e)))?;
+            .map_err(|e| {
+                error!(download_id = %context.download_id, error = %e, "Failed to read manifest body");
+                DownloadError::Network(format!("Failed to read manifest: {}", e))
+            })?;
+
+        debug!(download_id = %context.download_id, size = manifest_text.len(), "Manifest received, parsing...");
 
         let mut segment_urls = Vec::new();
         let base_url = Url::parse(url).map_err(|e| DownloadError::Config(e.to_string()))?;
