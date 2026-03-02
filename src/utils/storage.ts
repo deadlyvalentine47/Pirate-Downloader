@@ -52,7 +52,7 @@ export const addHistoryItem = (
         url: url.substring(0, 40) + '...',
         filename: path.split(/[\\/]/).pop() || 'file',
         size: size,
-        date: new Date().toLocaleTimeString(),
+        timestamp: new Date().toISOString(),
         status: status
     };
 
