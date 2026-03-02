@@ -10,7 +10,13 @@ interface DownloadStore extends DownloadState {
     downloadState: DownloadStateType;
 
     // IPC Request State
-    pendingRequest: { url: string; filename: string; size?: number } | null;
+    pendingRequest: { 
+        url: string; 
+        filename: string; 
+        size?: number;
+        headers?: Record<string, string>;
+        referrer?: string | null;
+    } | null;
 
     // Actions
     setUrl: (url: string) => void;
@@ -21,14 +27,26 @@ interface DownloadStore extends DownloadState {
     setThreads: (threads: number) => void;
     setDownloadId: (id: string | null) => void;
     setDownloadState: (state: DownloadStateType) => void;
-    setPendingRequest: (req: { url: string; filename: string; size?: number } | null) => void;
+    setPendingRequest: (req: { 
+        url: string; 
+        filename: string; 
+        size?: number;
+        headers?: Record<string, string>;
+        referrer?: string | null;
+    } | null) => void;
     reset: () => void;
 }
 
 const initialState: DownloadState & {
     downloadId: string | null;
     downloadState: DownloadStateType;
-    pendingRequest: { url: string; filename: string; size?: number } | null;
+    pendingRequest: { 
+        url: string; 
+        filename: string; 
+        size?: number;
+        headers?: Record<string, string>;
+        referrer?: string | null;
+    } | null;
 } = {
     url: '',
     savePath: '',

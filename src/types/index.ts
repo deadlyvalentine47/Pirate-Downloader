@@ -5,7 +5,7 @@ export interface HistoryItem {
     url: string;
     filename: string;
     size: number;
-    date: string;
+    timestamp: string;
     status: 'Success' | 'Failed';
 }
 
