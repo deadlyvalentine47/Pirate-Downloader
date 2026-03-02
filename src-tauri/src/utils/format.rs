@@ -1,6 +1,6 @@
 /// Utility for detecting media formats and streaming protocols.
 
-pub fn requires_ffmpeg(url: &str) -> bool {
+pub fn is_streaming_protocol(url: &str) -> bool {
     let url_lc = url.to_lowercase();
     
     // Streaming manifest files (using contains to handle query params)
@@ -35,6 +35,6 @@ pub fn get_output_container(url: &str) -> &str {
     } else if url_lc.starts_with("rtmp") || url_lc.contains(".f4m") {
         "flv"
     } else {
-        "mkv" // Universal fallback for ffmpeg
+        "mkv" // Universal fallback
     }
 }

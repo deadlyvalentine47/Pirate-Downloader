@@ -34,10 +34,6 @@ pub enum DownloadError {
     /// State file not found (resume attempted but no state exists)
     #[error("State file not found for: {0}")]
     StateNotFound(String),
-
-    /// FFmpeg-specific errors
-    #[error("ffmpeg error: {0}")]
-    Ffmpeg(String),
 }
 
 /// Helper trait to add context to errors
