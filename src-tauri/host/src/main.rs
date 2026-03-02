@@ -2,9 +2,6 @@ use interprocess::local_socket::{LocalSocketStream, NameTypeSupport};
 use pirate_shared::{DownloadRequest, IpcMessage, IPC_NAME};
 use serde_json::Value;
 use std::io::{self, BufWriter, Read, Write};
-use std::process::Command;
-use std::thread;
-use std::time::Duration;
 
 fn main() -> io::Result<()> {
     loop {
