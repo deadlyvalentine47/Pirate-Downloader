@@ -32,7 +32,6 @@
       "icons/icon.ico"
     ],
     "externalBin": [
-      "ffmpeg",
       "host"
     ]
   }

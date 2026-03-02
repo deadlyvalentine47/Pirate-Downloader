@@ -14,8 +14,8 @@ use tracing::debug;
 
 // Module imports
 use core::error::DownloadError;
+use core::strategy::hls::HlsStrategy;
 use core::strategy::http::HttpStrategy;
-use core::strategy::ffmpeg::FfmpegStrategy;
 use core::strategy::DownloadStrategy;
 use core::{state, types};
 use network::{client, headers};
@@ -87,7 +87,7 @@ pub async fn start_download(
     let mut filepath_str = filepath.to_string_lossy().to_string();
 
     // Strategy Selection
-    let is_streaming = format::requires_ffmpeg(&url);
+    let is_streaming = format::is_streaming_protocol(&url);
     let mut final_total_size = total_size;
     
     // If streaming, ensure we have a good extension and set size to 0 (unknown)
@@ -96,7 +96,7 @@ pub async fn start_download(
         let path = std::path::Path::new(&filepath_str);
         let new_path = path.with_extension(ext);
         filepath_str = new_path.to_string_lossy().to_string();
-        final_total_size = 0; // FFmpeg handles dynamic streams
+        final_total_size = 0; // HLS handles dynamic streams
     }
 
     if !is_streaming && final_total_size < 1 {
@@ -114,7 +114,7 @@ pub async fn start_download(
 
     tracing::info!(download_id = %download_id, filename = %final_filename, is_streaming = is_streaming, "Starting download");
 
-    // 2. Allocator (Skip for streaming as ffmpeg handles its own output)
+    // 2. Allocator (Skip for streaming as downloader handles its own output)
     if !is_streaming {
         filesystem::allocate_sparse_file(std::path::Path::new(&filepath_str), final_total_size)?;
     }
@@ -158,7 +158,7 @@ pub async fn start_download(
 
     // 4. Run Loop (Delegated to Engine)
     let strategy: Box<dyn DownloadStrategy> = if is_streaming {
-        Box::new(FfmpegStrategy)
+        Box::new(HlsStrategy)
     } else {
         Box::new(HttpStrategy)
     };
@@ -188,7 +188,7 @@ pub async fn fetch_file_details_with_headers(
 ) -> Result<(String, u64), DownloadError> {
     // 0. If it's a streaming manifest, don't even try to fetch size/details via HTTP HEAD/GET
     // This avoids the '2 bytes' bug and unnecessary network calls.
-    if format::requires_ffmpeg(url) {
+    if format::is_streaming_protocol(url) {
         let filename = headers::extract_filename_from_url(url);
         return Ok((filename, 0));
     }

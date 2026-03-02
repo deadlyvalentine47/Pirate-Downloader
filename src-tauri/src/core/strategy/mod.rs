@@ -5,7 +5,7 @@ use crate::commands;
 use crate::core::state;
 
 pub mod http;
-pub mod ffmpeg;
+pub mod hls;
 
 /// The context required for a strategy to execute a download.
 pub struct DownloadContext {
