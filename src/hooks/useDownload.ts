@@ -62,7 +62,9 @@ export const useDownload = () => {
             const result = await invoke<DownloadResult>('download_file', {
                 url: url,
                 filepath: savePath,
-                threads: Number(threads)
+                threads: Number(threads),
+                headers: {},
+                referrer: null
             });
 
             if (result.status === 'completed') {
