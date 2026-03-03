@@ -1,0 +1,157 @@
+/* =====================================================
+   Pirate Downloader — Global Design System
+   v2.0 Dark Mode | Inter Font | Slate Palette
+   ===================================================== */
+
+/* Google Fonts fallback */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* ── Design Tokens ───────────────────────────────── */
+:root {
+  /* Backgrounds */
+  --bg-base:          #0f172a;   /* slate-900 - main window */
+  --bg-sidebar:       #1e293b;   /* slate-800 - sidebar */
+  --bg-card:          #1e293b;   /* slate-800 - cards */
+  --bg-elevated:      #263347;   /* slightly lighter card */
+  --bg-hover:         #2d3f55;   /* hover state */
+  --bg-input:         #0f172a;   /* inputs */
+  --bg-modal:         #1e293b;   /* modal background */
+
+  /* Accent Colors */
+  --accent-blue:      #38bdf8;   /* neon blue - active progress */
+  --accent-blue-dim:  #0ea5e9;   /* slightly darker blue */
+  --accent-gold:      #fbbf24;   /* pirate gold - paused/warning */
+  --accent-gold-dim:  #d97706;
+  --accent-green:     #22c55e;   /* completed / connected */
+  --accent-red:       #ef4444;   /* error / failed */
+  --accent-purple:    #a78bfa;   /* stream badge */
+
+  /* Text Colors */
+  --text-primary:     #f1f5f9;   /* slate-100 */
+  --text-secondary:   #94a3b8;   /* slate-400 */
+  --text-muted:       #64748b;   /* slate-500 */
+  --text-accent:      #38bdf8;
+
+  /* Borders */
+  --border-subtle:    #2d3f55;
+  --border-active:    #38bdf8;
+
+  /* Spacing */
+  --sidebar-width:    220px;
+  --topbar-height:    52px;
+  --radius-sm:        4px;
+  --radius-md:        8px;
+  --radius-lg:        12px;
+
+  /* Transitions */
+  --transition-fast:  0.15s ease;
+  --transition-med:   0.25s ease;
+
+  /* Scrollbar */
+  --scrollbar-track:  #0f172a;
+  --scrollbar-thumb:  #2d3f55;
+  --scrollbar-hover:  #38bdf8;
+}
+
+/* ── Reset & Base ────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--bg-base);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* ── Custom Scrollbar ────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-hover);
+}
+
+/* ── Focus Ring ──────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+/* ── Base Button Reset ───────────────────────────── */
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+  font-size: inherit;
+}
+
+/* ── Base Input Reset ────────────────────────────── */
+input, select, textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--accent-blue);
+}
+
+/* ── Shared Utility ──────────────────────────────── */
+.truncate {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ── Animations ──────────────────────────────────── */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 4px rgba(56, 189, 248, 0.3); }
+  50%       { box-shadow: 0 0 10px rgba(56, 189, 248, 0.7); }
+}
+
+@keyframes progress-shimmer {
+  0%   { background-position: -200px 0; }
+  100% { background-position: 200px 0; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}

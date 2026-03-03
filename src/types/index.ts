@@ -29,3 +29,21 @@ export interface DownloadState {
     status: string;
     threads: number;
 }
+
+export type DownloadStatus = 'active' | 'paused' | 'queued' | 'completed' | 'failed' | 'cancelled' | 'waiting_for_link';
+
+export interface DownloadEntry {
+    id: string;
+    filename: string;
+    url: string;
+    savePath: string;
+    progress: number;       // 0–100
+    speed: number;          // bytes/sec
+    eta: number;            // seconds remaining
+    totalSize: number;      // bytes
+    downloaded: number;     // bytes
+    status: DownloadStatus;
+    headers?: Record<string, string>;
+    referrer?: string | null;
+    addedAt: number;        // timestamp ms
+}

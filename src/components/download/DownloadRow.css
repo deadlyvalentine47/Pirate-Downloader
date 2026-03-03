@@ -1,0 +1,160 @@
+/* ── Download Row & Table ──────────────────────────── */
+.dl-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    animation: fade-in var(--transition-med);
+}
+
+/* Header */
+.dl-table thead th {
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-subtle);
+    position: sticky;
+    top: 0;
+    background: var(--bg-base);
+    z-index: 1;
+}
+
+/* Row */
+.dl-row {
+    border-bottom: 1px solid rgba(45, 63, 85, 0.5);
+    transition: background var(--transition-fast);
+    cursor: default;
+}
+
+.dl-row:hover {
+    background: var(--bg-elevated);
+}
+
+.dl-row:last-child {
+    border-bottom: none;
+}
+
+.dl-row-active {
+    /* subtle pulse to show activity */
+}
+
+/* Cells */
+.dl-cell {
+    padding: 10px 10px;
+    color: var(--text-primary);
+    vertical-align: middle;
+}
+
+.dl-cell-name {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    max-width: 280px;
+}
+
+.dl-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.dl-name {
+    flex: 1;
+    min-width: 0;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.dl-cell-size {
+    color: var(--text-secondary);
+    white-space: nowrap;
+    min-width: 70px;
+}
+
+.dl-cell-progress {
+    min-width: 160px;
+    width: 220px;
+}
+
+.dl-progress-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.dl-progress-bar-bg {
+    flex: 1;
+    height: 6px;
+    background: var(--bg-hover);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.dl-progress-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.4s ease;
+}
+
+.dl-progress-animated {
+    background-image: linear-gradient(90deg,
+            transparent 0%,
+            rgba(255, 255, 255, 0.15) 50%,
+            transparent 100%);
+    background-size: 200px 100%;
+    animation: progress-shimmer 1.6s linear infinite;
+}
+
+.dl-progress-pct {
+    font-size: 12px;
+    color: var(--text-secondary);
+    min-width: 34px;
+    text-align: right;
+}
+
+.dl-cell-metric {
+    color: var(--text-secondary);
+    white-space: nowrap;
+    min-width: 80px;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.dl-cell-status {
+    white-space: nowrap;
+    min-width: 90px;
+}
+
+/* Status Badges */
+.dl-status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.status-active {
+    background: rgba(56, 189, 248, 0.15);
+    color: var(--accent-blue);
+}
+
+.status-paused {
+    background: rgba(251, 191, 36, 0.15);
+    color: var(--accent-gold);
+}
+
+.status-done {
+    background: rgba(34, 197, 94, 0.15);
+    color: var(--accent-green);
+}
+
+.status-error {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--accent-red);
+}
