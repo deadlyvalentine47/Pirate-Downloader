@@ -6,6 +6,7 @@ use crate::core::state;
 
 pub mod http;
 pub mod hls;
+pub mod stream;
 
 /// The context required for a strategy to execute a download.
 pub struct DownloadContext {

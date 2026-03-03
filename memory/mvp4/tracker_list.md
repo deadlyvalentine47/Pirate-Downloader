@@ -1,16 +1,16 @@
-# MVP4: Feature Tracker List
+# MVP4 Tracker - Pirate Downloader
 
-This file tracks the high-level tasks for the "Peak Efficiency" phase of Pirate Downloader. Detailed specifications for each task are kept in separate files within the `memory/mvp4/` directory.
+## Universal Streaming Engine [New Architecture]
+*   [ ] **Foundation & Strategy Hub:** Create `UniversalStreamingStrategy` and config toggles. [Status: In Progress]
+*   [ ] **Parallel Segment Downloader:** Implement worker pool and buffered ordered writing. [Status: Pending]
+*   [ ] **Smart Processor (The .jpg Fix):** Implement MPEG-TS sync detection and header stripping. [Status: Pending]
+*   [ ] **HLS/DASH Resolver:** Refactor existing HLS logic into the new Resolver layer. [Status: Pending]
+*   [ ] **YouTube Platform Resolver:** Implement YouTube URL extraction logic. [Status: Pending]
 
-## 1. HLS Robustness (Phase 1)
-*   [ ] **HLS Parallel Segment Downloading:** Implement a worker pool for HLS segments (similar to `HttpStrategy`). [Status: Pending] [Spec: `hls_robustness.md`]
-*   [ ] **Master Playlist Resolver:** Enable recursive parsing for HLS master playlists and variant selection. [Status: Pending] [Spec: `hls_robustness.md`]
-*   [ ] **Quality Selection UI:** Create a React modal for selecting between different HLS resolutions/bitrates. [Status: Pending] [Spec: `hls_robustness.md`]
-*   [ ] **AES-128 Decryption:** Add native support for encrypted HLS streams. [Status: Pending] [Spec: `hls_robustness.md`]
+## UI & UX Enhancements
+*   [ ] **Progress Pulse Improvements:** Real-time segment status updates in the UI. [Status: Pending]
+*   [ ] **Global Download Toggles:** Add UI settings to enable/disable specific engine features. [Status: Pending]
 
-## 2. Platform Expansion (Future)
-*   [ ] **DASH Stream Robustness:** Port HLS improvements to the DASH downloader. [Status: Planned]
-*   [ ] **Browser Extension - Firefox Support:** Ensure the native host works seamlessly with Firefox. [Status: Planned]
-
----
-*Last Updated: March 2, 2026*
+## Core Bug Fixes & Optimization
+*   [ ] **Sparse File Allocation:** Ensure HLS/DASH files are pre-allocated correctly. [Status: Pending]
+*   [ ] **Error Handling Refine:** Improved error messages for network timeouts vs. server blocks. [Status: Pending]
