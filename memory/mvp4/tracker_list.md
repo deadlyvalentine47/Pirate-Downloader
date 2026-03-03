@@ -8,6 +8,12 @@
 *   [x] **YouTube Platform Resolver:** Implement YouTube URL extraction logic. [Status: Done]
 *   [x] **Final Engine Integration:** Update `lib.rs` to route traffic to the new engine. [Status: Done]
 
+## App UI Redesign [New Layout]
+*   [ ] **Scaffold Layout:** Implement Sidebar navigation, Top Action Bar, and Main Content area. [Status: Pending]
+*   [ ] **New Download Modal:** Move URL input into a sleek popup dialog. [Status: Pending]
+*   [ ] **Categorized Views:** Filter downloads by Active, Completed, and Paused. [Status: Pending]
+*   [ ] **Dedicated Settings Page:** Create a settings view for global config. [Status: Pending]
+
 ## UI & UX Enhancements
 *   [ ] **Progress Pulse Improvements:** Real-time segment status updates in the UI. [Status: Pending]
 *   [ ] **Global Download Toggles:** Add UI settings to enable/disable specific engine features. [Status: Pending]
