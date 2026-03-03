@@ -1,9 +1,10 @@
 use crate::core::error::DownloadError;
+use super::processor::StreamProcessor;
 use futures_util::StreamExt;
 use reqwest::Client;
 use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
-use tracing::{debug, error, warn};
+use tracing::{debug, warn};
 use std::collections::HashMap;
 
 pub struct DownloadedSegment {
@@ -13,14 +14,21 @@ pub struct DownloadedSegment {
 
 pub struct ParallelDownloader {
     client: Arc<Client>,
+    processor: Arc<StreamProcessor>,
     max_parallel: usize,
     high_water_mark: usize,
 }
 
 impl ParallelDownloader {
-    pub fn new(client: Arc<Client>, max_parallel: usize, high_water_mark: usize) -> Self {
+    pub fn new(
+        client: Arc<Client>,
+        processor: Arc<StreamProcessor>,
+        max_parallel: usize,
+        high_water_mark: usize,
+    ) -> Self {
         Self {
             client,
+            processor,
             max_parallel,
             high_water_mark,
         }
@@ -33,22 +41,26 @@ impl ParallelDownloader {
         mut output_file: tokio::fs::File,
         _cancel_signal: Arc<std::sync::atomic::AtomicI32>,
     ) -> Result<(), DownloadError> {
-        let total_segments = segment_urls.len();
+        let _total_segments = segment_urls.len();
         let client = self.client.clone();
+        let processor = self.processor.clone();
         
-        // We use a stream to download segments in parallel.
-        // `.buffered(max_parallel)` handles the worker pool for us.
         let mut segment_stream = futures_util::stream::iter(segment_urls.into_iter().enumerate())
             .map(|(index, url)| {
                 let client = client.clone();
                 let headers = header_map.clone();
+                let processor = processor.clone();
                 async move {
                     let mut retry_count = 0;
                     while retry_count < 3 {
                         match client.get(&url).headers(headers.clone()).send().await {
                             Ok(resp) if resp.status().is_success() => {
                                 match resp.bytes().await {
-                                    Ok(bytes) => return Ok(DownloadedSegment { index, bytes: bytes.to_vec() }),
+                                    Ok(bytes) => {
+                                        // Clean the segment before returning it
+                                        let cleaned_bytes = processor.clean_segment(bytes.to_vec());
+                                        return Ok(DownloadedSegment { index, bytes: cleaned_bytes });
+                                    }
                                     Err(e) => warn!("Failed to read bytes for segment {}: {}", index, e),
                                 }
                             }
@@ -69,28 +81,20 @@ impl ParallelDownloader {
         while let Some(result) = segment_stream.next().await {
             let segment = result?;
             
-            // If this is the next segment we need, write it immediately.
             if segment.index == next_index_to_write {
                 output_file.write_all(&segment.bytes).await
                     .map_err(|e| DownloadError::Config(format!("Failed to write segment {}: {}", segment.index, e)))?;
                 next_index_to_write += 1;
 
-                // Check if any previously buffered segments can now be written.
                 while let Some(bytes) = pending_segments.remove(&next_index_to_write) {
                     output_file.write_all(&bytes).await
                         .map_err(|e| DownloadError::Config(format!("Failed to write segment {}: {}", next_index_to_write, e)))?;
                     next_index_to_write += 1;
                 }
             } else {
-                // Buffer the segment for later writing.
                 pending_segments.insert(segment.index, segment.bytes);
-                
-                // Backpressure check: If the buffer is too large, it means the downloader 
-                // is way ahead of the writer (likely waiting for a slow segment).
                 if pending_segments.len() > self.high_water_mark {
                     debug!("Backpressure: Buffer full ({}), waiting for writer...", pending_segments.len());
-                    // The .buffered() stream naturally provides some backpressure, but this 
-                    // extra check ensures we don't consume too much RAM if Segment 1 is stalled.
                 }
             }
         }
