@@ -4,7 +4,7 @@
 *   [ ] **Foundation & Strategy Hub:** Create `UniversalStreamingStrategy` and config toggles. [Status: In Progress]
 *   [ ] **Parallel Segment Downloader:** Implement worker pool and buffered ordered writing. [Status: In Progress]
 *   [ ] **Smart Processor (The .jpg Fix):** Implement MPEG-TS sync detection and header stripping. [Status: In Progress]
-*   [ ] **HLS/DASH Resolver:** Refactor existing HLS logic into the new Resolver layer. [Status: Pending]
+*   [ ] **HLS/DASH Resolver:** Refactor existing HLS logic into the new Resolver layer. [Status: In Progress]
 *   [ ] **YouTube Platform Resolver:** Implement YouTube URL extraction logic. [Status: Pending]
 
 ## UI & UX Enhancements
