@@ -1,14 +1,17 @@
+pub mod downloader;
+
 use super::{DownloadContext, DownloadStrategy};
 use crate::commands::DownloadCommandResult;
 use crate::core::error::DownloadError;
 use std::sync::Arc;
 use reqwest::Client;
+use downloader::ParallelDownloader;
 
 pub struct StreamingConfig {
     pub enable_parallel_segments: bool,
     pub enable_header_stripping: bool,
     pub enable_platform_resolvers: bool,
-    pub max_parallel_connections: u32,
+    pub max_parallel_connections: usize,
     pub buffer_high_water_mark: usize,
 }
 
@@ -27,14 +30,23 @@ impl Default for StreamingConfig {
 pub struct UniversalStreamingStrategy {
     config: StreamingConfig,
     client: Arc<Client>,
+    downloader: Arc<ParallelDownloader>,
 }
 
 impl UniversalStreamingStrategy {
     pub fn new(config: Option<StreamingConfig>) -> Self {
-        let client = crate::network::client::create_client().unwrap_or_else(|_| Client::new());
+        let config = config.unwrap_or_default();
+        let client = Arc::new(crate::network::client::create_client().unwrap_or_else(|_| Client::new()));
+        let downloader = Arc::new(ParallelDownloader::new(
+            client.clone(),
+            config.max_parallel_connections,
+            config.buffer_high_water_mark,
+        ));
+
         Self {
-            config: config.unwrap_or_default(),
-            client: Arc::new(client),
+            config,
+            client,
+            downloader,
         }
     }
 }
