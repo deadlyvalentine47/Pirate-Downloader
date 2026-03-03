@@ -14,8 +14,8 @@ use tracing::debug;
 
 // Module imports
 use core::error::DownloadError;
-use core::strategy::hls::HlsStrategy;
 use core::strategy::http::HttpStrategy;
+use core::strategy::stream::UniversalStreamingStrategy;
 use core::strategy::DownloadStrategy;
 use core::{state, types};
 use network::{client, headers};
@@ -157,8 +157,8 @@ pub async fn start_download(
         .await;
 
     // 4. Run Loop (Delegated to Engine)
-    let strategy: Box<dyn DownloadStrategy> = if is_streaming {
-        Box::new(HlsStrategy)
+    let strategy: Box<dyn DownloadStrategy> = if is_streaming || url.contains("youtube.com") || url.contains("youtu.be") {
+        Box::new(UniversalStreamingStrategy::new(None))
     } else {
         Box::new(HttpStrategy)
     };
