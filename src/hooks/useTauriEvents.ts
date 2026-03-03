@@ -1,46 +1,104 @@
 // Custom hook for Tauri event listeners
 import { useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { useDownloadStore } from '../stores/downloadStore';
+import { useDownloadStore, toDownloadStatus } from '../stores/downloadStore';
 
 export const useTauriEvents = () => {
-    const { setProgress, setTotalSize, setDownloadId, setDownloadState } = useDownloadStore();
+    const {
+        setProgress, setTotalSize, setDownloadId, setDownloadState,
+        addDownload, updateDownload,
+    } = useDownloadStore();
 
     useEffect(() => {
-        // Listen for download progress updates
+        // ── Legacy single-download progress ──────────────────────────
         const unlistenProgress = listen<number>('download-progress', (event) => {
             setProgress(event.payload);
+            // Also propagate to the downloads list if there's an active entry
+            const { downloadId, downloads } = useDownloadStore.getState();
+            if (downloadId) {
+                const entry = downloads.find(d => d.id === downloadId);
+                if (entry) {
+                    updateDownload(downloadId, { progress: event.payload });
+                }
+            }
         });
 
-        // Listen for download start (total size)
+        // ── Download start (total size) ───────────────────────────────
         const unlistenStart = listen<number>('download-start', (event) => {
             setTotalSize(event.payload);
+            const { downloadId } = useDownloadStore.getState();
+            if (downloadId) {
+                updateDownload(downloadId, { totalSize: event.payload });
+            }
         });
 
-        // Listen for download ID
+        // ── Download ID assigned ──────────────────────────────────────
         const unlistenId = listen<string>('download-id', (event) => {
-            setDownloadId(event.payload);
+            const id = event.payload;
+            setDownloadId(id);
             setDownloadState('active');
+
+            // Create a new entry in the downloads list if not already there
+            const { downloads, url, savePath } = useDownloadStore.getState();
+            if (!downloads.find(d => d.id === id)) {
+                const filename = savePath.split(/[\\/]/).pop() ?? 'Unknown File';
+                addDownload({
+                    id,
+                    filename,
+                    url,
+                    savePath,
+                    progress: 0,
+                    speed: 0,
+                    eta: 0,
+                    totalSize: 0,
+                    downloaded: 0,
+                    status: 'active',
+                    addedAt: Date.now(),
+                });
+            }
         });
 
-        // Listen for state changes
+        // ── Structured progress update (speed + eta) ─────────────────
+        const unlistenDetailedProgress = listen<{
+            id: string;
+            progress: number;
+            speed: number;
+            eta: number;
+            downloaded: number;
+            total: number;
+        }>('download-progress-detail', (event) => {
+            const { id, progress, speed, eta, downloaded, total } = event.payload;
+            updateDownload(id, { progress, speed, eta, downloaded, totalSize: total });
+        });
+
+        // ── State changes ─────────────────────────────────────────────
         const unlistenState = listen<string>('download-state', (event) => {
             setDownloadState(event.payload as any);
+            const { downloadId } = useDownloadStore.getState();
+            if (downloadId) {
+                updateDownload(downloadId, { status: toDownloadStatus(event.payload) });
+            }
         });
 
-        // Listen for IPC confirmation requests
-        const unlistenConfirmation = listen<{ url: string, filename: string, size?: number }>('request-download-confirmation', (event) => {
-            // Set pending request to trigger modal
+        // ── IPC confirmation requests ─────────────────────────────────
+        const unlistenConfirmation = listen<{
+            url: string;
+            filename: string;
+            size?: number;
+            headers?: Record<string, string>;
+            referrer?: string | null;
+        }>('request-download-confirmation', (event) => {
             useDownloadStore.getState().setPendingRequest(event.payload);
         });
 
-        // Cleanup listeners on unmount
+        // Cleanup
         return () => {
             unlistenProgress.then(f => f());
             unlistenStart.then(f => f());
             unlistenId.then(f => f());
+            unlistenDetailedProgress.then(f => f());
             unlistenState.then(f => f());
             unlistenConfirmation.then(f => f());
         };
-    }, [setProgress, setTotalSize, setDownloadId, setDownloadState]);
+    }, [setProgress, setTotalSize, setDownloadId, setDownloadState, addDownload, updateDownload]);
 };
