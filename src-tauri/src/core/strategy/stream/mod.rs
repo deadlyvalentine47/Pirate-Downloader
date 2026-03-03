@@ -91,6 +91,17 @@ impl DownloadStrategy for UniversalStreamingStrategy {
             }
         }
 
+        // Add standard User-Agent and Referer if present
+        header_map.insert(
+            reqwest::header::USER_AGENT,
+            reqwest::header::HeaderValue::from_static("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
+        );
+        if let Some(ref_url) = &context.metadata.referrer {
+            if let Ok(val) = reqwest::header::HeaderValue::from_str(ref_url) {
+                header_map.insert(reqwest::header::REFERER, val);
+            }
+        }
+
         // 2. Routing Logic
         let segment_urls = if url.contains("youtube.com") || url.contains("youtu.be") {
             if !self.config.enable_platform_resolvers {
