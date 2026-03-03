@@ -39,7 +39,7 @@ impl ParallelDownloader {
         segment_urls: Vec<String>,
         header_map: reqwest::header::HeaderMap,
         mut output_file: tokio::fs::File,
-        _cancel_signal: Arc<std::sync::atomic::AtomicI32>,
+        _cancel_signal: Arc<std::sync::atomic::AtomicU8>,
     ) -> Result<(), DownloadError> {
         let _total_segments = segment_urls.len();
         let client = self.client.clone();
