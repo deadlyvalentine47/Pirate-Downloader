@@ -5,7 +5,7 @@
 *   [ ] **Parallel Segment Downloader:** Implement worker pool and buffered ordered writing. [Status: In Progress]
 *   [ ] **Smart Processor (The .jpg Fix):** Implement MPEG-TS sync detection and header stripping. [Status: In Progress]
 *   [ ] **HLS/DASH Resolver:** Refactor existing HLS logic into the new Resolver layer. [Status: In Progress]
-*   [ ] **YouTube Platform Resolver:** Implement YouTube URL extraction logic. [Status: Pending]
+*   [ ] **YouTube Platform Resolver:** Implement YouTube URL extraction logic. [Status: In Progress]
 
 ## UI & UX Enhancements
 *   [ ] **Progress Pulse Improvements:** Real-time segment status updates in the UI. [Status: Pending]

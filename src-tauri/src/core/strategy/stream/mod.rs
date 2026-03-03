@@ -1,6 +1,7 @@
 pub mod downloader;
 pub mod processor;
 pub mod resolver;
+pub mod youtube;
 
 use super::{DownloadContext, DownloadStrategy};
 use crate::commands::DownloadCommandResult;
@@ -10,6 +11,7 @@ use reqwest::Client;
 use downloader::ParallelDownloader;
 use processor::StreamProcessor;
 use resolver::{StreamResolver, HlsResolver};
+use youtube::YoutubeResolver;
 use tokio::fs::OpenOptions;
 use tracing::{info, debug};
 
@@ -39,6 +41,7 @@ pub struct UniversalStreamingStrategy {
     downloader: Arc<ParallelDownloader>,
     processor: Arc<StreamProcessor>,
     hls_resolver: Arc<HlsResolver>,
+    youtube_resolver: Arc<YoutubeResolver>,
 }
 
 impl UniversalStreamingStrategy {
@@ -47,6 +50,7 @@ impl UniversalStreamingStrategy {
         let client = Arc::new(crate::network::client::create_client().unwrap_or_else(|_| Client::new()));
         let processor = Arc::new(StreamProcessor::new(config.enable_header_stripping));
         let hls_resolver = Arc::new(HlsResolver);
+        let youtube_resolver = Arc::new(YoutubeResolver);
         let downloader = Arc::new(ParallelDownloader::new(
             client.clone(),
             processor.clone(),
@@ -60,6 +64,7 @@ impl UniversalStreamingStrategy {
             downloader,
             processor,
             hls_resolver,
+            youtube_resolver,
         }
     }
 }
@@ -86,8 +91,17 @@ impl DownloadStrategy for UniversalStreamingStrategy {
             }
         }
 
-        // 2. Resolve URLs (Currently only HLS supported)
-        let segment_urls = self.hls_resolver.resolve(url, &self.client, &header_map).await?;
+        // 2. Routing Logic
+        let segment_urls = if url.contains("youtube.com") || url.contains("youtu.be") {
+            if !self.config.enable_platform_resolvers {
+                return Err(DownloadError::Config("Platform resolvers are currently disabled".to_string()));
+            }
+            self.youtube_resolver.resolve(url, &self.client, &header_map).await?
+        } else {
+            // Default to HLS
+            self.hls_resolver.resolve(url, &self.client, &header_map).await?
+        };
+
         debug!(download_id = %context.download_id, "Resolved {} segments", segment_urls.len());
 
         // 3. Prepare File
