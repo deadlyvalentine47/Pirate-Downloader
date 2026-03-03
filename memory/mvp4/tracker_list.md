@@ -2,7 +2,7 @@
 
 ## Universal Streaming Engine [New Architecture]
 *   [ ] **Foundation & Strategy Hub:** Create `UniversalStreamingStrategy` and config toggles. [Status: In Progress]
-*   [ ] **Parallel Segment Downloader:** Implement worker pool and buffered ordered writing. [Status: Pending]
+*   [ ] **Parallel Segment Downloader:** Implement worker pool and buffered ordered writing. [Status: In Progress]
 *   [ ] **Smart Processor (The .jpg Fix):** Implement MPEG-TS sync detection and header stripping. [Status: Pending]
 *   [ ] **HLS/DASH Resolver:** Refactor existing HLS logic into the new Resolver layer. [Status: Pending]
 *   [ ] **YouTube Platform Resolver:** Implement YouTube URL extraction logic. [Status: Pending]
