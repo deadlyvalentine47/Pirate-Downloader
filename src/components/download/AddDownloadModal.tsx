@@ -29,17 +29,18 @@ export const AddDownloadModal = () => {
             setLocalUrl(pendingRequest.url);
             setLocalFilename(pendingRequest.filename);
             setDetectedSize(pendingRequest.size ?? null);
+            setLocalThreads(threads);   // use settings thread count
             initSavePath(pendingRequest.filename);
         }
     }, [pendingRequest]);
 
-    // Auto-paste from clipboard when modal opens
+    // Auto-paste from clipboard when modal opens manually
     useEffect(() => {
         if (isOpen && !pendingRequest) {
             setLocalUrl('');
             setLocalFilename('');
             setDetectedSize(null);
-            setLocalThreads(threads);
+            setLocalThreads(threads);   // use settings thread count
             navigator.clipboard.readText().then(text => {
                 if (text.startsWith('http://') || text.startsWith('https://')) {
                     setLocalUrl(text);

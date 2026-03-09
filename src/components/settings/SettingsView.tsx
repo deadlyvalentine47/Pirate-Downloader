@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useDownloadStore } from '../../stores/downloadStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -6,8 +6,9 @@ import './SettingsView.css';
 
 export const SettingsView = () => {
     const { threads, setThreads } = useDownloadStore();
-    const { defaultDownloadPath, setDefaultDownloadPath, initDefaultDownloadPath } = useUIStore();
-    const [maxParallel, setMaxParallel] = useState(3);
+    const { defaultDownloadPath, setDefaultDownloadPath, initDefaultDownloadPath,
+        maxParallelDownloads, setMaxParallelDownloads } = useUIStore();
+
 
     // Ensure the path is initialized from the system Downloads dir on first render
     useEffect(() => {
@@ -69,11 +70,11 @@ export const SettingsView = () => {
                                 type="range"
                                 min={1}
                                 max={10}
-                                value={maxParallel}
-                                onChange={e => setMaxParallel(Number(e.target.value))}
+                                value={maxParallelDownloads}
+                                onChange={e => setMaxParallelDownloads(Number(e.target.value))}
                                 className="settings-slider"
                             />
-                            <span className="settings-value-badge">{maxParallel}</span>
+                            <span className="settings-value-badge">{maxParallelDownloads}</span>
                         </div>
                     </SettingRow>
 
