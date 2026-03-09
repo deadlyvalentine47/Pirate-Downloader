@@ -72,15 +72,14 @@ pub async fn start_download(
     let download_control = Arc::new(commands::DownloadControl::new());
     let client = client::create_client()?;
 
-    // 1. Get Response & Size
-    let response = client.get(&url).send().await?;
-    let total_size = response.content_length().unwrap_or(0);
+    // 1. Get Response & Size robustly (using HEAD/GET Range fallback)
+    let (fetched_filename, total_size) = fetch_file_details_with_headers(&url, &headers, referrer.as_deref()).await?;
 
     // Resolve Filename
     let final_filename = if let Some(hint) = filename_hint {
         sanitize_filename::sanitize(hint)
     } else {
-        headers::extract_filename(&response, &url)
+        fetched_filename
     };
 
     let filepath = target_dir.join(&final_filename);
