@@ -1,13 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
-import { downloadDir, join } from '@tauri-apps/api/path';
+import { join } from '@tauri-apps/api/path';
 import { useDownloadStore } from '../../stores/downloadStore';
 import { useUIStore } from '../../stores/uiStore';
 import './AddDownloadModal.css';
 
 export const AddDownloadModal = () => {
-    const { showAddModal, setShowAddModal } = useUIStore();
+    const { showAddModal, setShowAddModal, defaultDownloadPath, initDefaultDownloadPath } = useUIStore();
+
+    // Ensure default path is initialized from system Downloads dir if not yet set
+    useEffect(() => { initDefaultDownloadPath(); }, []);
     const { pendingRequest, setPendingRequest, addDownload, setUrl, setSavePath, setThreads, threads } = useDownloadStore();
 
     const [url, setLocalUrl] = useState('');
@@ -49,8 +52,9 @@ export const AddDownloadModal = () => {
 
     const initSavePath = async (fname: string) => {
         try {
-            const dir = await downloadDir();
-            setLocalSavePath(fname ? await join(dir, fname) : dir);
+            // Use the user-configured default path (falls back to system default if empty)
+            const baseDir = defaultDownloadPath || '.';
+            setLocalSavePath(fname ? await join(baseDir, fname) : baseDir);
         } catch { }
     };
 
@@ -89,8 +93,8 @@ export const AddDownloadModal = () => {
         const fname = filename || url.split('/').pop() || 'download';
         let fullPath = savePath;
         if (!fullPath) {
-            const dir = await downloadDir();
-            fullPath = await join(dir, fname);
+            const baseDir = defaultDownloadPath || '.';
+            fullPath = await join(baseDir, fname);
         }
 
         const dlId = crypto.randomUUID();

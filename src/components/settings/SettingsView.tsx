@@ -1,11 +1,30 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { open } from '@tauri-apps/plugin-dialog';
 import { useDownloadStore } from '../../stores/downloadStore';
+import { useUIStore } from '../../stores/uiStore';
 import './SettingsView.css';
 
 export const SettingsView = () => {
     const { threads, setThreads } = useDownloadStore();
-    const [defaultPath, setDefaultPath] = useState('');
+    const { defaultDownloadPath, setDefaultDownloadPath, initDefaultDownloadPath } = useUIStore();
     const [maxParallel, setMaxParallel] = useState(3);
+
+    // Ensure the path is initialized from the system Downloads dir on first render
+    useEffect(() => {
+        initDefaultDownloadPath();
+    }, []);
+
+    const handleBrowseFolder = async () => {
+        const selected = await open({
+            directory: true,
+            multiple: false,
+            defaultPath: defaultDownloadPath || undefined,
+            title: 'Select Default Download Folder',
+        });
+        if (selected && typeof selected === 'string') {
+            setDefaultDownloadPath(selected);
+        }
+    };
 
     return (
         <div className="settings-view">
@@ -16,15 +35,27 @@ export const SettingsView = () => {
                         label="Default Download Folder"
                         description="Where new downloads are saved by default"
                     >
-                        <input
-                            className="settings-input"
-                            value={defaultPath}
-                            onChange={e => setDefaultPath(e.target.value)}
-                            placeholder="~/Downloads"
-                        />
+                        <div className="settings-path-row">
+                            <input
+                                className="settings-input settings-input-path"
+                                value={defaultDownloadPath}
+                                onChange={e => setDefaultDownloadPath(e.target.value)}
+                                placeholder="Select a folder..."
+                                readOnly
+                                title={defaultDownloadPath}
+                            />
+                            <button
+                                className="settings-browse-btn"
+                                onClick={handleBrowseFolder}
+                                title="Browse for folder"
+                            >
+                                📁
+                            </button>
+                        </div>
                     </SettingRow>
                 </div>
             </div>
+
 
             <div className="settings-section">
                 <h2 className="settings-section-title">Network</h2>

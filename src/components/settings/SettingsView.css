@@ -78,6 +78,37 @@
     border-color: var(--accent-blue);
 }
 
+/* Path field with browse button */
+.settings-path-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.settings-input-path {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: default;
+    flex: 1;
+    min-width: 0;
+}
+
+.settings-browse-btn {
+    flex-shrink: 0;
+    padding: 6px 10px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    font-size: 15px;
+    line-height: 1;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.settings-browse-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent-blue);
+}
+
 .settings-number-row {
     display: flex;
     align-items: center;
