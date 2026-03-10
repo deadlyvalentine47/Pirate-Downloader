@@ -87,34 +87,26 @@ pub async fn start_download(
 
     // Strategy Selection
     let is_streaming = format::is_streaming_protocol(&url);
-    let mut final_total_size = total_size;
+    let final_total_size = total_size;
+
+    // If streaming OR if server didn't report size, we MUST use a streaming strategy
+    let use_streaming_engine = is_streaming || final_total_size == 0;
     
-    // If streaming, ensure we have a good extension and set size to 0 (unknown)
     if is_streaming {
         let ext = format::get_output_container(&url);
         let path = std::path::Path::new(&filepath_str);
         let new_path = path.with_extension(ext);
         filepath_str = new_path.to_string_lossy().to_string();
-        final_total_size = 0; // HLS handles dynamic streams
-    }
-
-    if !is_streaming && final_total_size < 1 {
-        // Warning log, but maybe proceed?
-        // For sparse file allocation we NEED size.
-        // MVP3 decision: Fail if no size, as per existing logic.
-        return Err(DownloadError::Config(
-            "File has no size! Server did not report Content-Length.".to_string(),
-        ));
     }
 
     // CRITICAL: Tell Frontend the size AND download ID immediately
     let _ = app.emit("download-start", final_total_size);
     let _ = app.emit("download-id", download_id.clone());
 
-    tracing::info!(download_id = %download_id, filename = %final_filename, is_streaming = is_streaming, "Starting download");
+    tracing::info!(download_id = %download_id, filename = %final_filename, use_streaming_engine = use_streaming_engine, size = final_total_size, "Starting download");
 
-    // 2. Allocator (Skip for streaming as downloader handles its own output)
-    if !is_streaming {
+    // 2. Allocator (Skip for streaming OR unknown size as we can't pre-allocate)
+    if !use_streaming_engine {
         filesystem::allocate_sparse_file(std::path::Path::new(&filepath_str), final_total_size)?;
     }
 
@@ -125,8 +117,8 @@ pub async fn start_download(
         types::DEFAULT_THREADS
     } as u32;
     
-    let chunk_size = if is_streaming { 0 } else { filesystem::calculate_chunk_size(final_total_size) };
-    let total_chunks = if is_streaming { 0 } else { (final_total_size + chunk_size - 1) / chunk_size };
+    let chunk_size = if use_streaming_engine { 0 } else { filesystem::calculate_chunk_size(final_total_size) };
+    let total_chunks = if use_streaming_engine { 0 } else { (final_total_size + chunk_size - 1) / chunk_size };
 
     let metadata = state::DownloadMetadata {
         url: url.clone(),
@@ -138,7 +130,7 @@ pub async fn start_download(
         referrer,
         thread_count: actual_threads,
         completed_chunks: vec![],
-        incomplete_chunks: if is_streaming { vec![] } else { (0..total_chunks).collect() },
+        incomplete_chunks: if use_streaming_engine { vec![] } else { (0..total_chunks).collect() },
         created_at: chrono::Utc::now(),
         paused_at: None,
         resumed_at: None,
@@ -156,7 +148,7 @@ pub async fn start_download(
         .await;
 
     // 4. Run Loop (Delegated to Engine)
-    let strategy: Box<dyn DownloadStrategy> = if is_streaming || url.contains("youtube.com") || url.contains("youtu.be") {
+    let strategy: Box<dyn DownloadStrategy> = if use_streaming_engine || url.contains("youtube.com") || url.contains("youtu.be") {
         Box::new(UniversalStreamingStrategy::new(None))
     } else {
         Box::new(HttpStrategy)

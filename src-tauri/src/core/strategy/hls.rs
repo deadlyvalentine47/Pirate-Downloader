@@ -1,4 +1,5 @@
 use super::{DownloadContext, DownloadStrategy};
+use crate::core::persistence;
 use crate::commands::DownloadCommandResult;
 use crate::core::error::DownloadError;
 use std::sync::atomic::Ordering;
@@ -198,6 +199,9 @@ impl DownloadStrategy for HlsStrategy {
 
         file.flush().await.map_err(|e| DownloadError::Config(e.to_string()))?;
         info!(download_id = %context.download_id, "HLS download complete");
+
+        // Delete state file on successful completion
+        let _ = persistence::delete_state(&context.metadata.filepath);
 
         // Update manager state
         if let Some(mut meta) = context.manager.get_download(&context.download_id).await {

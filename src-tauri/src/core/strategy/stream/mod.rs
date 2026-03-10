@@ -4,16 +4,18 @@ pub mod resolver;
 pub mod youtube;
 
 use super::{DownloadContext, DownloadStrategy};
+use crate::core::persistence;
 use crate::commands::DownloadCommandResult;
 use crate::core::error::DownloadError;
 use std::sync::Arc;
 use reqwest::Client;
 use downloader::ParallelDownloader;
 use processor::StreamProcessor;
-use resolver::{StreamResolver, HlsResolver};
+use resolver::{StreamResolver, HlsResolver, DirectResolver};
 use youtube::YoutubeResolver;
 use tokio::fs::OpenOptions;
 use tracing::{info, debug};
+use crate::utils::format;
 
 pub struct StreamingConfig {
     pub enable_parallel_segments: bool,
@@ -42,6 +44,7 @@ pub struct UniversalStreamingStrategy {
     processor: Arc<StreamProcessor>,
     hls_resolver: Arc<HlsResolver>,
     youtube_resolver: Arc<YoutubeResolver>,
+    direct_resolver: Arc<DirectResolver>,
 }
 
 impl UniversalStreamingStrategy {
@@ -51,6 +54,7 @@ impl UniversalStreamingStrategy {
         let processor = Arc::new(StreamProcessor::new(config.enable_header_stripping));
         let hls_resolver = Arc::new(HlsResolver);
         let youtube_resolver = Arc::new(YoutubeResolver);
+        let direct_resolver = Arc::new(DirectResolver);
         let downloader = Arc::new(ParallelDownloader::new(
             client.clone(),
             processor.clone(),
@@ -65,6 +69,7 @@ impl UniversalStreamingStrategy {
             processor,
             hls_resolver,
             youtube_resolver,
+            direct_resolver,
         }
     }
 }
@@ -108,9 +113,12 @@ impl DownloadStrategy for UniversalStreamingStrategy {
                 return Err(DownloadError::Config("Platform resolvers are currently disabled".to_string()));
             }
             self.youtube_resolver.resolve(url, &self.client, &header_map).await?
-        } else {
-            // Default to HLS
+        } else if format::is_streaming_protocol(url) {
+            // Default to HLS for known streaming extensions
             self.hls_resolver.resolve(url, &self.client, &header_map).await?
+        } else {
+            // Fallback for direct URLs with no Content-Length
+            self.direct_resolver.resolve(url, &self.client, &header_map).await?
         };
 
         debug!(download_id = %context.download_id, "Resolved {} segments", segment_urls.len());
@@ -135,6 +143,9 @@ impl DownloadStrategy for UniversalStreamingStrategy {
         ).await?;
 
         info!(download_id = %context.download_id, "Universal Engine: Download complete");
+
+        // Delete state file on successful completion
+        let _ = persistence::delete_state(&context.metadata.filepath);
         
         Ok(DownloadCommandResult {
             id: context.download_id.clone(),

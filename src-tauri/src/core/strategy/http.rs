@@ -1,7 +1,7 @@
 use super::{DownloadContext, DownloadStrategy};
 use crate::commands::DownloadCommandResult;
 use crate::core::error::DownloadError;
-use crate::core::{integrity, types};
+use crate::core::{integrity, persistence, types};
 use crate::network::client;
 use crate::utils;
 use reqwest::header::RANGE;
@@ -374,6 +374,9 @@ impl DownloadStrategy for HttpStrategy {
         let final_completed_count = completed_chunks.lock().await.len() as u64;
 
         integrity::verify_download(final_bytes, total_size, final_completed_count, total_chunks)?;
+
+        // Delete state file on successful completion
+        let _ = persistence::delete_state(&context.metadata.filepath);
 
         let _ = context.app.emit("download-progress", total_size);
 

@@ -57,3 +57,13 @@ impl StreamResolver for HlsResolver {
         Ok(segment_urls)
     }
 }
+
+pub struct DirectResolver;
+
+#[async_trait::async_trait]
+impl StreamResolver for DirectResolver {
+    async fn resolve(&self, url: &str, _client: &Client, _headers: &reqwest::header::HeaderMap) -> Result<Vec<String>, DownloadError> {
+        debug!("Direct Resolver: Using URL as single segment: {}", url);
+        Ok(vec![url.to_string()])
+    }
+}

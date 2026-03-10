@@ -83,6 +83,7 @@ impl ParallelDownloader {
 
         let mut next_index_to_write = 0;
         let mut pending_segments: HashMap<usize, Vec<u8>> = HashMap::new();
+        let start_time = std::time::Instant::now();
 
         while let Some(result) = segment_stream.next().await {
             let segment = result?;
@@ -110,15 +111,33 @@ impl ParallelDownloader {
 
             let current_total_bytes = control.downloaded_bytes.fetch_add(current_segment_bytes, Ordering::SeqCst) + current_segment_bytes;
             
+            // Speed and ETA Calculation
+            let elapsed = start_time.elapsed().as_secs_f64();
+            let speed = if elapsed > 0.1 {
+                current_total_bytes as f64 / elapsed
+            } else {
+                0.0
+            };
+
             let progress_pct = (downloaded_segments as f64 / total_segments as f64) * 100.0;
+            let eta = if speed > 0.0 && total_segments > downloaded_segments {
+                let remaining_segments = (total_segments - downloaded_segments) as f64;
+                // Rough estimate based on average segment size if available, 
+                // but since segments vary, we use the progress ratio
+                let total_estimated_bytes = (current_total_bytes as f64 / (downloaded_segments as f64 / total_segments as f64)) as u64;
+                let remaining_bytes = total_estimated_bytes.saturating_sub(current_total_bytes);
+                (remaining_bytes as f64 / speed) as u64
+            } else {
+                0
+            };
             
             let _ = app.emit("download-progress-detail", json!({
                 "id": download_id,
                 "downloadedBytes": current_total_bytes,
                 "totalBytes": 0, // Unknown for streaming usually
                 "progress": progress_pct,
-                "speed": 0,
-                "eta": 0
+                "speed": speed,
+                "eta": eta
             }));
 
             // Keep legacy emission
