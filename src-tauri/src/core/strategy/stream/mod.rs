@@ -129,7 +129,9 @@ impl DownloadStrategy for UniversalStreamingStrategy {
             segment_urls,
             header_map,
             file,
-            context.control.signal.clone()
+            context.app.clone(),
+            context.download_id.clone(),
+            context.control.clone(),
         ).await?;
 
         info!(download_id = %context.download_id, "Universal Engine: Download complete");

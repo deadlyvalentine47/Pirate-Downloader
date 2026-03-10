@@ -13,13 +13,10 @@ export const useTauriEvents = () => {
         // ── Legacy single-download progress ──────────────────────────
         const unlistenProgress = listen<number>('download-progress', (event) => {
             setProgress(event.payload);
-            // Also propagate to the downloads list if there's an active entry
-            const { downloadId, downloads } = useDownloadStore.getState();
+            const { downloadId } = useDownloadStore.getState();
             if (downloadId) {
-                const entry = downloads.find(d => d.id === downloadId);
-                if (entry) {
-                    updateDownload(downloadId, { progress: event.payload });
-                }
+                // IMPORTANT: Only update 'downloaded', NOT 'progress' (percentage)
+                updateDownload(downloadId, { downloaded: event.payload });
             }
         });
 
@@ -39,8 +36,10 @@ export const useTauriEvents = () => {
             setDownloadState('active');
 
             // Create a new entry in the downloads list if not already there
-            const { downloads, url, savePath } = useDownloadStore.getState();
-            if (!downloads.find(d => d.id === id)) {
+            const { downloads, url, savePath, totalSize } = useDownloadStore.getState();
+            const existing = downloads.find(d => d.id === id);
+
+            if (!existing) {
                 const filename = savePath.split(/[\\/]/).pop() ?? 'Unknown File';
                 addDownload({
                     id,
@@ -50,25 +49,34 @@ export const useTauriEvents = () => {
                     progress: 0,
                     speed: 0,
                     eta: 0,
-                    totalSize: 0,
+                    totalSize: totalSize || 0, // Use existing totalSize if already fetched
                     downloaded: 0,
                     status: 'active',
                     addedAt: Date.now(),
                 });
+            } else if (existing.totalSize === 0 && totalSize > 0) {
+                // Reconcile size if it was just fetched
+                updateDownload(id, { totalSize });
             }
         });
 
         // ── Structured progress update (speed + eta) ─────────────────
         const unlistenDetailedProgress = listen<{
             id: string;
-            progress: number;
+            progress_pct: number;
             speed: number;
             eta: number;
-            downloaded: number;
-            total: number;
+            downloaded_bytes: number;
+            total_bytes: number;
         }>('download-progress-detail', (event) => {
-            const { id, progress, speed, eta, downloaded, total } = event.payload;
-            updateDownload(id, { progress, speed, eta, downloaded, totalSize: total });
+            const { id, progress_pct, speed, eta, downloaded_bytes, total_bytes } = event.payload;
+            updateDownload(id, {
+                progress: progress_pct,
+                speed,
+                eta,
+                downloaded: downloaded_bytes,
+                totalSize: total_bytes > 0 ? total_bytes : undefined
+            });
         });
 
         // ── State changes ─────────────────────────────────────────────

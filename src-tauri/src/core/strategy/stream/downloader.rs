@@ -6,6 +6,8 @@ use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 use tracing::{debug, warn};
 use std::collections::HashMap;
+use tauri::Emitter;
+use std::sync::atomic::Ordering;
 
 pub struct DownloadedSegment {
     pub index: usize,
@@ -39,11 +41,14 @@ impl ParallelDownloader {
         segment_urls: Vec<String>,
         header_map: reqwest::header::HeaderMap,
         mut output_file: tokio::fs::File,
-        _cancel_signal: Arc<std::sync::atomic::AtomicU8>,
+        app: tauri::AppHandle,
+        download_id: String,
+        control: Arc<crate::commands::DownloadControl>,
     ) -> Result<(), DownloadError> {
-        let _total_segments = segment_urls.len();
+        let total_segments = segment_urls.len();
         let client = self.client.clone();
         let processor = self.processor.clone();
+        let mut downloaded_segments = 0;
         
         let mut segment_stream = futures_util::stream::iter(segment_urls.into_iter().enumerate())
             .map(|(index, url)| {
@@ -81,6 +86,10 @@ impl ParallelDownloader {
         while let Some(result) = segment_stream.next().await {
             let segment = result?;
             
+            // Progress Reporting
+            downloaded_segments += 1;
+            let current_segment_bytes = segment.bytes.len() as u64;
+            
             if segment.index == next_index_to_write {
                 output_file.write_all(&segment.bytes).await
                     .map_err(|e| DownloadError::Config(format!("Failed to write segment {}: {}", segment.index, e)))?;
@@ -97,6 +106,22 @@ impl ParallelDownloader {
                     debug!("Backpressure: Buffer full ({}), waiting for writer...", pending_segments.len());
                 }
             }
+
+            let current_total_bytes = control.downloaded_bytes.fetch_add(current_segment_bytes, Ordering::SeqCst) + current_segment_bytes;
+            
+            let progress_pct = (downloaded_segments as f64 / total_segments as f64) * 100.0;
+            
+            let _ = app.emit("download-progress-detail", serde_json::json!({
+                "id": download_id,
+                "downloaded_bytes": current_total_bytes,
+                "total_bytes": 0, // Unknown for streaming usually
+                "progress_pct": progress_pct,
+                "speed": 0,
+                "eta": 0
+            }));
+
+            // Keep legacy emission
+            let _ = app.emit("download-progress", current_total_bytes);
         }
 
         output_file.flush().await.map_err(|e| DownloadError::Config(e.to_string()))?;

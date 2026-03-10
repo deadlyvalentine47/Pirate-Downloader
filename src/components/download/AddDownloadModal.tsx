@@ -134,6 +134,7 @@ export const AddDownloadModal = () => {
                     threads: localThreads,
                     headers,
                     referrer,
+                    id: dlId,
                 });
             } catch (e) {
                 console.error('Download failed:', e);

@@ -273,17 +273,65 @@ impl DownloadStrategy for HttpStrategy {
         let monitor_manager = context.manager.clone();
         let monitor_id = context.download_id.clone();
         let monitor_control = context.control.clone();
+        let monitor_app = context.app.clone();
+        let monitor_total_size = total_size;
+        
         let monitor_handle = tokio::spawn(async move {
+            let mut last_bytes = monitor_control.downloaded_bytes.load(Ordering::Relaxed);
+            let mut last_time = std::time::Instant::now();
+            
             loop {
                 tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+                
                 if monitor_control.signal.load(Ordering::Relaxed) != 0 {
                     break;
                 }
-                let bytes = monitor_control.downloaded_bytes.load(Ordering::Relaxed);
+                
+                let current_bytes = monitor_control.downloaded_bytes.load(Ordering::Relaxed);
+                let now = std::time::Instant::now();
+                let duration = now.duration_since(last_time).as_secs_f64();
+                
+                let bytes_diff = if current_bytes >= last_bytes {
+                    current_bytes - last_bytes
+                } else {
+                    0
+                };
+                
+                let speed = if duration > 0.0 {
+                    (bytes_diff as f64 / duration) as u64
+                } else {
+                    0
+                };
+                
+                let progress_pct = if monitor_total_size > 0 {
+                    (current_bytes as f64 / monitor_total_size as f64) * 100.0
+                } else {
+                    0.0
+                };
+                
+                let eta = if speed > 0 && monitor_total_size > current_bytes {
+                    (monitor_total_size - current_bytes) / speed
+                } else {
+                    0
+                };
+                
+                // Emit detailed progress
+                let _ = monitor_app.emit("download-progress-detail", serde_json::json!({
+                    "id": monitor_id,
+                    "downloaded_bytes": current_bytes,
+                    "total_bytes": monitor_total_size,
+                    "progress_pct": progress_pct,
+                    "speed": speed,
+                    "eta": eta
+                }));
+
                 if let Some(mut meta) = monitor_manager.get_download(&monitor_id).await {
-                    meta.downloaded_bytes = bytes;
+                    meta.downloaded_bytes = current_bytes;
                     monitor_manager.update_download(&monitor_id, meta).await;
                 }
+                
+                last_bytes = current_bytes;
+                last_time = now;
             }
         });
 

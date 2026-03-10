@@ -31,6 +31,7 @@ async fn download_file(
     threads: u64,
     headers: std::collections::HashMap<String, String>,
     referrer: Option<String>,
+    id: Option<String>,
     manager: tauri::State<'_, commands::DownloadManager>,
 ) -> Result<DownloadCommandResult, DownloadError> {
     let path = PathBuf::from(&filepath);
@@ -49,6 +50,7 @@ async fn download_file(
         (*manager).clone(),
         headers,
         referrer,
+        id,
     )
     .await
 }
@@ -63,11 +65,12 @@ pub async fn start_download(
     manager: commands::DownloadManager,
     headers: std::collections::HashMap<String, String>,
     referrer: Option<String>,
+    id: Option<String>,
 ) -> Result<DownloadCommandResult, DownloadError> {
-    // Generate unique download ID
-    let download_id = uuid::Uuid::new_v4().to_string();
+    // Generate or use provided unique download ID
+    let download_id = id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let download_control = Arc::new(commands::DownloadControl::new());
-    let client = client::create_client()?;
+    let _client = client::create_client()?;
 
     // 1. Get Response & Size robustly (using HEAD/GET Range fallback)
     let (fetched_filename, total_size) = fetch_file_details_with_headers(&url, &headers, referrer.as_deref()).await?;
