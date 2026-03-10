@@ -13,6 +13,7 @@ use tauri::Emitter;
 use tokio::io::AsyncSeekExt;
 use tokio::io::AsyncWriteExt;
 use tracing::{debug, error, info, warn};
+use serde_json::json;
 
 pub struct HttpStrategy;
 
@@ -316,11 +317,11 @@ impl DownloadStrategy for HttpStrategy {
                 };
                 
                 // Emit detailed progress
-                let _ = monitor_app.emit("download-progress-detail", serde_json::json!({
+                let _ = monitor_app.emit("download-progress-detail", json!({
                     "id": monitor_id,
-                    "downloaded_bytes": current_bytes,
-                    "total_bytes": monitor_total_size,
-                    "progress_pct": progress_pct,
+                    "downloadedBytes": current_bytes,
+                    "totalBytes": monitor_total_size,
+                    "progress": progress_pct,
                     "speed": speed,
                     "eta": eta
                 }));

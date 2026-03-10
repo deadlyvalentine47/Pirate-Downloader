@@ -8,6 +8,7 @@ use tracing::{debug, warn};
 use std::collections::HashMap;
 use tauri::Emitter;
 use std::sync::atomic::Ordering;
+use serde_json::json;
 
 pub struct DownloadedSegment {
     pub index: usize,
@@ -111,11 +112,11 @@ impl ParallelDownloader {
             
             let progress_pct = (downloaded_segments as f64 / total_segments as f64) * 100.0;
             
-            let _ = app.emit("download-progress-detail", serde_json::json!({
+            let _ = app.emit("download-progress-detail", json!({
                 "id": download_id,
-                "downloaded_bytes": current_total_bytes,
-                "total_bytes": 0, // Unknown for streaming usually
-                "progress_pct": progress_pct,
+                "downloadedBytes": current_total_bytes,
+                "totalBytes": 0, // Unknown for streaming usually
+                "progress": progress_pct,
                 "speed": 0,
                 "eta": 0
             }));

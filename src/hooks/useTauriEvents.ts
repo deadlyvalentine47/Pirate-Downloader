@@ -61,22 +61,28 @@ export const useTauriEvents = () => {
         });
 
         // ── Structured progress update (speed + eta) ─────────────────
-        const unlistenDetailedProgress = listen<{
-            id: string;
-            progress_pct: number;
-            speed: number;
-            eta: number;
-            downloaded_bytes: number;
-            total_bytes: number;
-        }>('download-progress-detail', (event) => {
-            const { id, progress_pct, speed, eta, downloaded_bytes, total_bytes } = event.payload;
-            updateDownload(id, {
-                progress: progress_pct,
-                speed,
-                eta,
-                downloaded: downloaded_bytes,
-                totalSize: total_bytes > 0 ? total_bytes : undefined
-            });
+        const unlistenDetailedProgress = listen<any>('download-progress-detail', (event) => {
+            const payload = event.payload;
+            if (!payload || typeof payload !== 'object') return;
+
+            // Map backend camelCase names to store fields
+            const { id, progress, speed, eta, downloadedBytes, totalBytes } = payload;
+
+            if (!id) return;
+
+            const patch: any = {
+                progress: typeof progress === 'number' ? progress : 0,
+                speed: typeof speed === 'number' ? speed : 0,
+                eta: typeof eta === 'number' ? eta : 0,
+                downloaded: typeof downloadedBytes === 'number' ? downloadedBytes : 0,
+            };
+
+            // Only update totalSize if it's a valid positive number
+            if (typeof totalBytes === 'number' && totalBytes > 0) {
+                patch.totalSize = totalBytes;
+            }
+
+            updateDownload(id, patch);
         });
 
         // ── State changes ─────────────────────────────────────────────

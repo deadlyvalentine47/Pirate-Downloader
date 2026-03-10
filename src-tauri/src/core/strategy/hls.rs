@@ -6,6 +6,7 @@ use tauri::Emitter;
 use tokio::io::AsyncWriteExt;
 use tracing::{debug, error, info, warn};
 use url::Url;
+use serde_json::json;
 
 pub struct HlsStrategy;
 
@@ -181,13 +182,13 @@ impl DownloadStrategy for HlsStrategy {
             // Emit detailed progress
             // Note: speed and eta in HLS are tricky without a temporal monitor, 
             // but we can emit the basics for now or add a monitor.
-            // For now, let's just emit the byte counts and pct.
-            let _ = context.app.emit("download-progress-detail", serde_json::json!({
+            // For now, let's just            // Emit detailed progress
+            let _ = context.app.emit("download-progress-detail", json!({
                 "id": context.download_id,
-                "downloaded_bytes": current_total_bytes,
-                "total_bytes": 0, // 0 means unknown/streaming
-                "progress_pct": progress_pct,
-                "speed": 0, // Will be calculated by frontend or we can add monitor
+                "downloadedBytes": current_total_bytes,
+                "totalBytes": 0, // 0 means unknown/streaming
+                "progress": progress_pct,
+                "speed": 0,
                 "eta": 0
             }));
 

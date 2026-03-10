@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { openPath } from '@tauri-apps/plugin-opener';
+import { ask } from '@tauri-apps/plugin-dialog';
 import type { DownloadEntry } from '../../types';
 import { useDownloadStore } from '../../stores/downloadStore';
 import { ContextMenu, type ContextMenuItem } from '../common/ContextMenu';
@@ -63,31 +64,64 @@ export const DownloadRow = ({ entry }: DownloadRowProps) => {
     const { label, cls } = getStatusLabel(entry.status);
     const isActive = entry.status === 'active';
     const isPaused = entry.status === 'paused' || entry.status === 'queued';
+    const isWaiting = entry.status === 'waiting_for_link';
 
     const handleContextMenu = (e: React.MouseEvent) => {
         e.preventDefault();
         setCtxMenu({ x: e.clientX, y: e.clientY });
     };
 
-    const handlePause = async () => {
+    /**
+     * Resilient action wrapper. If the backend fails (e.g., out of sync), 
+     * it offers to remove the download from the list.
+     */
+    const performAction = async (command: string, successState?: DownloadEntry['status']) => {
         try {
-            await invoke('pause_download', { downloadId: entry.id });
-            updateDownload(entry.id, { status: 'paused' });
-        } catch (e) { console.error(e); }
+            await invoke(command, { downloadId: entry.id });
+            if (successState) {
+                updateDownload(entry.id, { status: successState });
+            }
+        } catch (err) {
+            console.error(`Action ${command} failed:`, err);
+
+            // Show error popup and offer cleanup
+            const confirmed = await ask(
+                `The action failed: "${err}".\n\nThis download might be out of sync with the backend. Would you like to remove it from the list?`,
+                { title: 'Action Failed', kind: 'error', okLabel: 'Remove from List', cancelLabel: 'Keep' }
+            );
+
+            if (confirmed) {
+                handleRemove();
+            }
+        }
     };
 
-    const handleResume = async () => {
-        try {
-            await invoke('resume_download', { downloadId: entry.id });
-            updateDownload(entry.id, { status: 'active' });
-        } catch (e) { console.error(e); }
+    const handlePause = () => performAction('pause_download', 'paused');
+    const handleResume = () => performAction('resume_download', 'active');
+
+    const handleDelete = async () => {
+        const confirmed = await ask(
+            `Are you sure you want to delete "${entry.filename}"? This will stop the download and delete all local data.`,
+            { title: 'Delete Download', kind: 'warning', okLabel: 'Delete', cancelLabel: 'Cancel' }
+        );
+
+        if (confirmed) {
+            try {
+                // Delete from disk and cleanup
+                await invoke('cancel_download', { downloadId: entry.id });
+                removeDownload(entry.id);
+            } catch (e) {
+                // If cancel fails because it's already gone, just remove from UI
+                removeDownload(entry.id);
+            }
+        }
     };
 
-    const handleCancel = async () => {
+    const handleRemove = async () => {
         try {
-            await invoke('cancel_download', { downloadId: entry.id });
-            removeDownload(entry.id);
-        } catch (e) { console.error(e); }
+            await invoke('remove_from_list', { downloadId: entry.id });
+        } catch (e) { /* ignore */ }
+        removeDownload(entry.id);
     };
 
     const openFolder = async () => {
@@ -101,11 +135,13 @@ export const DownloadRow = ({ entry }: DownloadRowProps) => {
 
     const ctxItems: ContextMenuItem[] = [
         ...(isActive ? [{ label: 'Pause', icon: '⏸', onClick: handlePause }] : []),
-        ...(isPaused ? [{ label: 'Resume', icon: '▶', onClick: handleResume }] : []),
+        ...(isPaused || isWaiting ? [{ label: 'Resume', icon: '▶', onClick: handleResume }] : []),
         { label: 'Open Folder', icon: '📂', onClick: openFolder },
         { label: 'Copy URL', icon: '📋', onClick: copyUrl },
         { divider: true } as any,
-        { label: 'Remove', icon: '🗑', onClick: handleCancel, danger: true },
+        { label: 'Delete from Disk', icon: '🔥', onClick: handleDelete, danger: true },
+        // Hidden for active downloads per user request
+        ...(!isActive ? [{ label: 'Remove from List', icon: '🗑', onClick: handleRemove }] : []),
     ];
 
     const progressColor = entry.status === 'paused' ? 'var(--accent-gold)'
