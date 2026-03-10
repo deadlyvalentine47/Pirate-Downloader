@@ -93,11 +93,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         detectedMedia = [];
         sendResponse({ success: true });
     } else if (request.type === "DOWNLOAD_MEDIA") {
-        sendToHost("DOWNLOAD_REQUEST", {
-            url: request.url,
-            filename: request.filename,
-            referrer: request.referrer || sender.url || ""
-        });
+        dispatchDownloadRequest("DOWNLOAD_REQUEST", request.url, request.filename, request.referrer || sender.url || "");
         sendResponse({ success: true });
     }
     return true; // Keep channel open for async responses
@@ -143,18 +139,47 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
     if (url) {
         console.log("Context Menu clicked:", info.menuItemId, url);
-
-        // Construct payload matching pirate-shared::DownloadRequest
-        const payload = {
-            url: url,
-            filename: filename, // Let backend/host determine or we can sniff
-            headers: {}, // TODO: Extract headers if possible via webRequest
-            referrer: info.pageUrl
-        };
-
-        sendToHost("DOWNLOAD_REQUEST", payload);
+        dispatchDownloadRequest("DOWNLOAD_REQUEST", url, filename, info.pageUrl);
     }
 });
+
+// Helper to extract cookies, userAgent, and send to Native Host
+function dispatchDownloadRequest(type, url, filename, referrer) {
+    if (!url) return;
+
+    const userAgent = navigator.userAgent;
+    
+    // Parse basis URL for cookies
+    try {
+        const parsedUrl = new URL(url);
+        chrome.cookies.getAll({ url: parsedUrl.origin }, (cookies) => {
+            let cookieStr = "";
+            if (cookies && cookies.length > 0) {
+                cookieStr = cookies.map(c => `${c.name}=${c.value}`).join('; ');
+            }
+            
+            const payload = {
+                url: url,
+                filename: filename || undefined,
+                referrer: referrer || "",
+                cookies: cookieStr,
+                user_agent: userAgent
+            };
+            sendToHost(type, payload);
+        });
+    } catch (e) {
+        console.error("Invalid URL:", url, e);
+        // Fallback without cookies
+        const payload = {
+            url: url,
+            filename: filename || undefined,
+            referrer: referrer || "",
+            cookies: "",
+            user_agent: userAgent
+        };
+        sendToHost(type, payload);
+    }
+}
 
 // Helper to send typed messages to Host
 function sendToHost(type, payload) {
@@ -180,13 +205,13 @@ chrome.downloads.onCreated.addListener((downloadItem) => {
         } else {
             console.log("Browser download cancelled. Offloading to Pirate.");
 
-            // Send to Native Host
-            const payload = {
-                url: downloadItem.url,
-                filename: downloadItem.filename, // Might be empty/provisional
-                referrer: downloadItem.referrer
-            };
-            sendToHost("DOWNLOAD_REQUEST", payload);
+            if (isWaitingForRefresh) {
+                console.log("Captured refreshed link:", downloadItem.url);
+                dispatchDownloadRequest("LINK_UPDATE", downloadItem.url, undefined, downloadItem.referrer);
+                isWaitingForRefresh = false;
+            } else {
+                dispatchDownloadRequest("DOWNLOAD_REQUEST", downloadItem.url, downloadItem.filename, downloadItem.referrer);
+            }
         }
     });
 });
@@ -198,19 +223,13 @@ chrome.webRequest.onBeforeRequest.addListener(
         
         const url = details.url.split('?')[0];
 
-        // Link Refresh Logic
+        // Link Refresh Logic (IDM Mode fallback for streams)
+        // Note: Standard downloads are handled by chrome.downloads.onCreated above.
+        // This is only necessary for video streams (HLS/DASH) that don't trigger downloads.
         if (isWaitingForRefresh) {
-            // How do we know it's the right link? 
-            // Usually by checking if it's the same filename or from the same domain.
-            // For MVP, we'll take the first large-looking or manifest-looking file
-            if (url.endsWith(".zip") || url.endsWith(".exe") || url.endsWith(".iso") || 
-                url.endsWith(".mp4") || url.endsWith(".m3u8")) {
-                
-                console.log("Captured refreshed link:", details.url);
-                sendToHost("LINK_UPDATE", {
-                    url: details.url,
-                    referrer: details.initiator || details.documentUrl
-                });
+            if (url.endsWith(".m3u8") || url.endsWith(".mpd")) {
+                console.log("Captured refreshed STREAM link:", details.url);
+                dispatchDownloadRequest("LINK_UPDATE", details.url, undefined, details.initiator || details.documentUrl);
                 isWaitingForRefresh = false;
             }
         }

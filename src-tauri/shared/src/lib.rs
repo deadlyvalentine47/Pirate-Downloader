@@ -16,6 +16,7 @@ pub struct DownloadRequest {
     pub filename: Option<String>,
     pub headers: std::collections::HashMap<String, String>,
     pub cookies: Option<String>,
+    pub user_agent: Option<String>,
     pub referrer: Option<String>,
 }
 

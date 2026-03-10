@@ -23,8 +23,6 @@ use utils::{filesystem, logger, format};
 // Import the struct from engine, do NOT redefine it
 use crate::commands::DownloadCommandResult;
 
-// REMOVED DUPLICATE STRUCT DEFINITION
-
 #[tauri::command]
 async fn download_file(
     app: tauri::AppHandle,
@@ -55,7 +53,6 @@ async fn download_file(
     .await
 }
 
-/// Shared entry point for starting a download (used by Command and IPC)
 /// Shared entry point for starting a download (used by Command and IPC)
 pub async fn start_download(
     app: tauri::AppHandle,
@@ -219,6 +216,10 @@ pub async fn fetch_file_details_with_headers(
     }
 
     let response = response.map_err(|e| DownloadError::Network(e.to_string()))?;
+    
+    if !response.status().is_success() {
+        return Err(DownloadError::Network(format!("Server returned error: {}", response.status())));
+    }
     
     let mut size = 0;
     if let Some(range_header) = response.headers().get("content-range") {

@@ -67,6 +67,7 @@ impl DownloadStrategy for HttpStrategy {
         let total_chunks_cloned = total_chunks;
         let manager_cloned = context.manager.clone();
         let download_id_cloned = context.download_id.clone();
+        let headers_cloned = context.metadata.headers.clone();
 
         for _ in 0..actual_threads {
             let url = url.clone();
@@ -85,9 +86,10 @@ impl DownloadStrategy for HttpStrategy {
             let total_chunks = total_chunks_cloned;
             let manager = manager_cloned.clone();
             let download_id = download_id_cloned.clone();
+            let headers = headers_cloned.clone();
 
             let handle = tokio::spawn(async move {
-                let client = client::create_worker_client();
+                let client = client::create_worker_client_with_headers(&headers);
                 let path_buf = PathBuf::from(path);
 
                 let file = match tokio::fs::OpenOptions::new()

@@ -83,8 +83,16 @@ fn handle_connection(conn: LocalSocketStream, app: AppHandle) {
 
 async fn handle_download_request(
     app: AppHandle,
-    req: pirate_shared::DownloadRequest,
+    mut req: pirate_shared::DownloadRequest,
 ) -> anyhow::Result<()> {
+    // 0. Inject extracted cookies and user-agent into headers map
+    if let Some(ref cookies) = req.cookies {
+        req.headers.insert("Cookie".to_string(), cookies.clone());
+    }
+    if let Some(ref ua) = req.user_agent {
+        req.headers.insert("User-Agent".to_string(), ua.clone());
+    }
+
     // 1. Check if we already have a good filename from the extension
     let ext_filename = req.filename.as_ref()
         .map(|f| f.trim())
@@ -158,6 +166,15 @@ async fn handle_link_update(
         
         if let Some(mut meta) = manager.get_download(&id).await {
             meta.url = req.url.clone();
+            
+            // Inject new cookies and user-agent into the headers map
+            if let Some(ref cookies) = req.cookies {
+                meta.headers.insert("Cookie".to_string(), cookies.clone());
+            }
+            if let Some(ref ua) = req.user_agent {
+                meta.headers.insert("User-Agent".to_string(), ua.clone());
+            }
+
             // Automatically resume or wait for user?
             // IDM usually resumes automatically once link is refreshed.
             meta.state = DownloadState::Paused;
