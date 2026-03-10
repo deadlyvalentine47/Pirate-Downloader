@@ -29,7 +29,9 @@ function formatBytes(bytes: number): string {
     let v = bytes;
     let i = 0;
     while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
-    return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+    // Use 2 decimals for MB and above for better accuracy and consistency
+    const precision = i >= 2 ? 2 : (i === 0 ? 0 : 1);
+    return `${v.toFixed(precision)} ${units[i]}`;
 }
 
 function formatSpeed(bps: number): string {
@@ -42,6 +44,19 @@ function formatEta(seconds: number): string {
     if (seconds < 60) return `${Math.round(seconds)}s`;
     if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
     return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+}
+
+function formatDone(bytes: number): string {
+    if (!bytes || bytes === 0) return '0.00 MB';
+    const mb = bytes / (1024 * 1024);
+    if (mb < 1024) {
+        // Use 2 decimals to match the precision of formatBytes
+        return `${mb.toFixed(2)} MB`;
+    } else {
+        // Show GB with 2 decimals (1.00 GB -> 1.01 GB)
+        const gb = mb / 1024;
+        return `${gb.toFixed(2)} GB`;
+    }
 }
 
 function getStatusLabel(status: DownloadEntry['status']): { label: string; cls: string } {
@@ -168,6 +183,11 @@ export const DownloadRow = ({ entry }: DownloadRowProps) => {
                     {formatBytes(entry.totalSize)}
                 </td>
 
+                {/* Done */}
+                <td className="dl-cell dl-cell-metric">
+                    {formatDone(entry.downloaded)}
+                </td>
+
                 {/* Progress */}
                 <td className="dl-cell dl-cell-progress">
                     <div className="dl-progress-wrap">
@@ -181,7 +201,7 @@ export const DownloadRow = ({ entry }: DownloadRowProps) => {
                             />
                         </div>
                         <span className="dl-progress-pct">
-                            {entry.progress > 0 ? `${Math.round(entry.progress)}%` : '0%'}
+                            {entry.status === 'completed' ? '100%' : (entry.progress > 0 ? `${Math.round(entry.progress)}%` : '0%')}
                         </span>
                     </div>
                 </td>

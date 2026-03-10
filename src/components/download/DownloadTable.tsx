@@ -81,6 +81,7 @@ export const DownloadTable = ({ filter }: DownloadTableProps) => {
                 <tr>
                     <th>File Name</th>
                     <th>Size</th>
+                    <th>Done</th>
                     <th>Progress</th>
                     <th>Speed</th>
                     <th>ETA</th>
