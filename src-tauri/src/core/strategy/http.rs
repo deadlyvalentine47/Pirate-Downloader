@@ -1,7 +1,7 @@
 use super::{DownloadContext, DownloadStrategy};
 use crate::commands::DownloadCommandResult;
 use crate::core::error::DownloadError;
-use crate::core::{integrity, types};
+use crate::core::{integrity, persistence, types};
 use crate::network::client;
 use crate::utils;
 use reqwest::header::RANGE;
@@ -13,6 +13,7 @@ use tauri::Emitter;
 use tokio::io::AsyncSeekExt;
 use tokio::io::AsyncWriteExt;
 use tracing::{debug, error, info, warn};
+use serde_json::json;
 
 pub struct HttpStrategy;
 
@@ -67,6 +68,7 @@ impl DownloadStrategy for HttpStrategy {
         let total_chunks_cloned = total_chunks;
         let manager_cloned = context.manager.clone();
         let download_id_cloned = context.download_id.clone();
+        let headers_cloned = context.metadata.headers.clone();
 
         for _ in 0..actual_threads {
             let url = url.clone();
@@ -85,9 +87,10 @@ impl DownloadStrategy for HttpStrategy {
             let total_chunks = total_chunks_cloned;
             let manager = manager_cloned.clone();
             let download_id = download_id_cloned.clone();
+            let headers = headers_cloned.clone();
 
             let handle = tokio::spawn(async move {
-                let client = client::create_worker_client();
+                let client = client::create_worker_client_with_headers(&headers);
                 let path_buf = PathBuf::from(path);
 
                 let file = match tokio::fs::OpenOptions::new()
@@ -271,17 +274,65 @@ impl DownloadStrategy for HttpStrategy {
         let monitor_manager = context.manager.clone();
         let monitor_id = context.download_id.clone();
         let monitor_control = context.control.clone();
+        let monitor_app = context.app.clone();
+        let monitor_total_size = total_size;
+        
         let monitor_handle = tokio::spawn(async move {
+            let mut last_bytes = monitor_control.downloaded_bytes.load(Ordering::Relaxed);
+            let mut last_time = std::time::Instant::now();
+            
             loop {
                 tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+                
                 if monitor_control.signal.load(Ordering::Relaxed) != 0 {
                     break;
                 }
-                let bytes = monitor_control.downloaded_bytes.load(Ordering::Relaxed);
+                
+                let current_bytes = monitor_control.downloaded_bytes.load(Ordering::Relaxed);
+                let now = std::time::Instant::now();
+                let duration = now.duration_since(last_time).as_secs_f64();
+                
+                let bytes_diff = if current_bytes >= last_bytes {
+                    current_bytes - last_bytes
+                } else {
+                    0
+                };
+                
+                let speed = if duration > 0.0 {
+                    (bytes_diff as f64 / duration) as u64
+                } else {
+                    0
+                };
+                
+                let progress_pct = if monitor_total_size > 0 {
+                    (current_bytes as f64 / monitor_total_size as f64) * 100.0
+                } else {
+                    0.0
+                };
+                
+                let eta = if speed > 0 && monitor_total_size > current_bytes {
+                    (monitor_total_size - current_bytes) / speed
+                } else {
+                    0
+                };
+                
+                // Emit detailed progress
+                let _ = monitor_app.emit("download-progress-detail", json!({
+                    "id": monitor_id,
+                    "downloadedBytes": current_bytes,
+                    "totalBytes": monitor_total_size,
+                    "progress": progress_pct,
+                    "speed": speed,
+                    "eta": eta
+                }));
+
                 if let Some(mut meta) = monitor_manager.get_download(&monitor_id).await {
-                    meta.downloaded_bytes = bytes;
+                    meta.downloaded_bytes = current_bytes;
                     monitor_manager.update_download(&monitor_id, meta).await;
                 }
+                
+                last_bytes = current_bytes;
+                last_time = now;
             }
         });
 
@@ -323,6 +374,9 @@ impl DownloadStrategy for HttpStrategy {
         let final_completed_count = completed_chunks.lock().await.len() as u64;
 
         integrity::verify_download(final_bytes, total_size, final_completed_count, total_chunks)?;
+
+        // Delete state file on successful completion
+        let _ = persistence::delete_state(&context.metadata.filepath);
 
         let _ = context.app.emit("download-progress", total_size);
 

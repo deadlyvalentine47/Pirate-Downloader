@@ -1,4 +1,4 @@
-use interprocess::local_socket::{LocalSocketStream, NameTypeSupport};
+use interprocess::local_socket::LocalSocketStream;
 use pirate_shared::{DownloadRequest, IpcMessage, IPC_NAME};
 use serde_json::Value;
 use std::io::{self, BufWriter, Read, Write};
@@ -43,8 +43,9 @@ fn main() -> io::Result<()> {
                         .collect()
                 })
                 .unwrap_or_default(),
-            cookies: None, // Extension needs to send this, assume empty for now
-            referrer: payload["referrer"].as_str().map(|s| s.to_string()),
+            cookies: payload["cookies"].as_str().filter(|s| !s.is_empty()).map(|s| s.to_string()),
+            user_agent: payload["user_agent"].as_str().filter(|s| !s.is_empty()).map(|s| s.to_string()),
+            referrer: payload["referrer"].as_str().filter(|s| !s.is_empty()).map(|s| s.to_string()),
         };
 
         // 4. Send to App via IPC

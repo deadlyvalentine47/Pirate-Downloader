@@ -1,4 +1,5 @@
 use super::{DownloadContext, DownloadStrategy};
+use crate::core::persistence;
 use crate::commands::DownloadCommandResult;
 use crate::core::error::DownloadError;
 use std::sync::atomic::Ordering;
@@ -6,6 +7,7 @@ use tauri::Emitter;
 use tokio::io::AsyncWriteExt;
 use tracing::{debug, error, info, warn};
 use url::Url;
+use serde_json::json;
 
 pub struct HlsStrategy;
 
@@ -122,6 +124,7 @@ impl DownloadStrategy for HlsStrategy {
             .map_err(|e| DownloadError::Config(format!("Failed to create output file: {}", e)))?;
 
         let mut downloaded_segments = 0;
+        let mut last_segment_size = 0;
 
         for (i, seg_url) in segment_urls.iter().enumerate() {
             // Check for cancellation/pause
@@ -149,6 +152,7 @@ impl DownloadStrategy for HlsStrategy {
                 match seg_resp {
                     Ok(resp) if resp.status().is_success() => {
                         let bytes = resp.bytes().await.map_err(|e| DownloadError::Network(e.to_string()))?;
+                        last_segment_size = bytes.len() as u64;
                         file.write_all(&bytes).await.map_err(|e| DownloadError::Config(e.to_string()))?;
                         success = true;
                     }
@@ -166,17 +170,38 @@ impl DownloadStrategy for HlsStrategy {
 
             downloaded_segments += 1;
             
+            // Update downloaded bytes in control for consistency
+            let current_total_bytes = context.control.downloaded_bytes.fetch_add(last_segment_size, Ordering::SeqCst) + last_segment_size;
+
             // Emit progress pulse (Pulse the UI like IDM does)
             let progress_msg = format!("Segment {}/{} downloaded", downloaded_segments, total_segments);
             let _ = context.app.emit("download-progress-pulse", progress_msg);
             
-            // Update total progress (treating each segment as a unit of work since we don't know total bytes yet)
-            // Or we can just pretend the size is the number of segments
-            let _ = context.app.emit("download-progress", (downloaded_segments * 100 / total_segments) as u64);
+            // Calculate percentage based on segments
+            let progress_pct = (downloaded_segments as f64 / total_segments as f64) * 100.0;
+            
+            // Emit detailed progress
+            // Note: speed and eta in HLS are tricky without a temporal monitor, 
+            // but we can emit the basics for now or add a monitor.
+            // For now, let's just            // Emit detailed progress
+            let _ = context.app.emit("download-progress-detail", json!({
+                "id": context.download_id,
+                "downloadedBytes": current_total_bytes,
+                "totalBytes": 0, // 0 means unknown/streaming
+                "progress": progress_pct,
+                "speed": 0,
+                "eta": 0
+            }));
+
+            // Keep legacy emission
+            let _ = context.app.emit("download-progress", current_total_bytes);
         }
 
         file.flush().await.map_err(|e| DownloadError::Config(e.to_string()))?;
         info!(download_id = %context.download_id, "HLS download complete");
+
+        // Delete state file on successful completion
+        let _ = persistence::delete_state(&context.metadata.filepath);
 
         // Update manager state
         if let Some(mut meta) = context.manager.get_download(&context.download_id).await {

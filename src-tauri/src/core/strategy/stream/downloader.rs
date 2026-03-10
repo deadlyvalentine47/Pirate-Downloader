@@ -6,6 +6,9 @@ use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 use tracing::{debug, warn};
 use std::collections::HashMap;
+use tauri::Emitter;
+use std::sync::atomic::Ordering;
+use serde_json::json;
 
 pub struct DownloadedSegment {
     pub index: usize,
@@ -39,11 +42,14 @@ impl ParallelDownloader {
         segment_urls: Vec<String>,
         header_map: reqwest::header::HeaderMap,
         mut output_file: tokio::fs::File,
-        _cancel_signal: Arc<std::sync::atomic::AtomicU8>,
+        app: tauri::AppHandle,
+        download_id: String,
+        control: Arc<crate::commands::DownloadControl>,
     ) -> Result<(), DownloadError> {
-        let _total_segments = segment_urls.len();
+        let total_segments = segment_urls.len();
         let client = self.client.clone();
         let processor = self.processor.clone();
+        let mut downloaded_segments = 0;
         
         let mut segment_stream = futures_util::stream::iter(segment_urls.into_iter().enumerate())
             .map(|(index, url)| {
@@ -77,9 +83,14 @@ impl ParallelDownloader {
 
         let mut next_index_to_write = 0;
         let mut pending_segments: HashMap<usize, Vec<u8>> = HashMap::new();
+        let start_time = std::time::Instant::now();
 
         while let Some(result) = segment_stream.next().await {
             let segment = result?;
+            
+            // Progress Reporting
+            downloaded_segments += 1;
+            let current_segment_bytes = segment.bytes.len() as u64;
             
             if segment.index == next_index_to_write {
                 output_file.write_all(&segment.bytes).await
@@ -97,6 +108,40 @@ impl ParallelDownloader {
                     debug!("Backpressure: Buffer full ({}), waiting for writer...", pending_segments.len());
                 }
             }
+
+            let current_total_bytes = control.downloaded_bytes.fetch_add(current_segment_bytes, Ordering::SeqCst) + current_segment_bytes;
+            
+            // Speed and ETA Calculation
+            let elapsed = start_time.elapsed().as_secs_f64();
+            let speed = if elapsed > 0.1 {
+                current_total_bytes as f64 / elapsed
+            } else {
+                0.0
+            };
+
+            let progress_pct = (downloaded_segments as f64 / total_segments as f64) * 100.0;
+            let eta = if speed > 0.0 && total_segments > downloaded_segments {
+                let remaining_segments = (total_segments - downloaded_segments) as f64;
+                // Rough estimate based on average segment size if available, 
+                // but since segments vary, we use the progress ratio
+                let total_estimated_bytes = (current_total_bytes as f64 / (downloaded_segments as f64 / total_segments as f64)) as u64;
+                let remaining_bytes = total_estimated_bytes.saturating_sub(current_total_bytes);
+                (remaining_bytes as f64 / speed) as u64
+            } else {
+                0
+            };
+            
+            let _ = app.emit("download-progress-detail", json!({
+                "id": download_id,
+                "downloadedBytes": current_total_bytes,
+                "totalBytes": 0, // Unknown for streaming usually
+                "progress": progress_pct,
+                "speed": speed,
+                "eta": eta
+            }));
+
+            // Keep legacy emission
+            let _ = app.emit("download-progress", current_total_bytes);
         }
 
         output_file.flush().await.map_err(|e| DownloadError::Config(e.to_string()))?;

@@ -391,13 +391,6 @@ pub async fn stop_download(
 ///
 /// Terminates the download immediately, deletes the partial file and state file.
 /// This operation cannot be undone.
-///
-/// # Arguments
-/// * `download_id` - Unique identifier for the download
-///
-/// # Returns
-/// * `Ok(())` if cancel was successful
-/// * `Err(String)` if cancel failed
 #[tauri::command]
 pub async fn cancel_download(
     download_id: String,
@@ -407,15 +400,12 @@ pub async fn cancel_download(
     warn!(download_id = %download_id, "Cancelling download - will cleanup all files");
 
     // Get current download metadata
-    let mut metadata = manager.get_download(&download_id).await.ok_or_else(|| {
-        error!(download_id = %download_id, "Download not found");
+    let metadata = manager.get_download(&download_id).await.ok_or_else(|| {
+        error!(download_id = %download_id, "Download not found during cancel");
         format!("Download {} not found", download_id)
     })?;
 
     let filepath = metadata.filepath.clone();
-
-    // Update state to cancelled
-    metadata.cancel();
 
     // Set control signal to cancel (3)
     if let Some(control) = manager.get_control(&download_id).await {
@@ -426,22 +416,11 @@ pub async fn cancel_download(
     }
 
     // Delete state file
-    delete_state(&filepath).map_err(|e| {
-        error!(download_id = %download_id, error = %e, "Failed to delete state file");
-        e.to_string()
-    })?;
+    let _ = delete_state(&filepath);
 
     // Delete partial file if it exists
     if std::path::Path::new(&filepath).exists() {
-        std::fs::remove_file(&filepath).map_err(|e| {
-            error!(
-                download_id = %download_id,
-                filepath = %filepath,
-                error = %e,
-                "Failed to delete partial file"
-            );
-            e.to_string()
-        })?;
+        let _ = std::fs::remove_file(&filepath);
         debug!(filepath = %filepath, "Deleted partial file");
     }
 
@@ -455,6 +434,45 @@ pub async fn cancel_download(
 
     // Emit state change event to frontend
     let _ = app.emit("download-state", "cancelled");
+
+    Ok(())
+}
+
+/// Remove a download from the list without deleting the file on disk
+#[tauri::command]
+pub async fn remove_from_list(
+    download_id: String,
+    manager: State<'_, DownloadManager>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    info!(download_id = %download_id, "Removing download from list only");
+
+    // Get current download metadata
+    let metadata = match manager.get_download(&download_id).await {
+        Some(m) => m,
+        None => {
+            warn!(download_id = %download_id, "Download not found during remove - ignoring");
+            return Ok(());
+        }
+    };
+
+    let filepath = metadata.filepath.clone();
+
+    // Signal stop if active (2 = stop)
+    if let Some(control) = manager.get_control(&download_id).await {
+        control
+            .signal
+            .store(2, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    // Delete state file (to stop it from being trackable as a persistent download)
+    let _ = delete_state(&filepath);
+
+    // Remove from in-memory manager
+    manager.remove_download(&download_id).await;
+
+    // Emit state change
+    let _ = app.emit("download-state", "removed");
 
     Ok(())
 }

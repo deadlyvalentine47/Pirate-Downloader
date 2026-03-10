@@ -23,8 +23,6 @@ use utils::{filesystem, logger, format};
 // Import the struct from engine, do NOT redefine it
 use crate::commands::DownloadCommandResult;
 
-// REMOVED DUPLICATE STRUCT DEFINITION
-
 #[tauri::command]
 async fn download_file(
     app: tauri::AppHandle,
@@ -33,6 +31,7 @@ async fn download_file(
     threads: u64,
     headers: std::collections::HashMap<String, String>,
     referrer: Option<String>,
+    id: Option<String>,
     manager: tauri::State<'_, commands::DownloadManager>,
 ) -> Result<DownloadCommandResult, DownloadError> {
     let path = PathBuf::from(&filepath);
@@ -51,11 +50,11 @@ async fn download_file(
         (*manager).clone(),
         headers,
         referrer,
+        id,
     )
     .await
 }
 
-/// Shared entry point for starting a download (used by Command and IPC)
 /// Shared entry point for starting a download (used by Command and IPC)
 pub async fn start_download(
     app: tauri::AppHandle,
@@ -66,21 +65,21 @@ pub async fn start_download(
     manager: commands::DownloadManager,
     headers: std::collections::HashMap<String, String>,
     referrer: Option<String>,
+    id: Option<String>,
 ) -> Result<DownloadCommandResult, DownloadError> {
-    // Generate unique download ID
-    let download_id = uuid::Uuid::new_v4().to_string();
+    // Generate or use provided unique download ID
+    let download_id = id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let download_control = Arc::new(commands::DownloadControl::new());
-    let client = client::create_client()?;
+    let _client = client::create_client()?;
 
-    // 1. Get Response & Size
-    let response = client.get(&url).send().await?;
-    let total_size = response.content_length().unwrap_or(0);
+    // 1. Get Response & Size robustly (using HEAD/GET Range fallback)
+    let (fetched_filename, total_size) = fetch_file_details_with_headers(&url, &headers, referrer.as_deref()).await?;
 
     // Resolve Filename
     let final_filename = if let Some(hint) = filename_hint {
         sanitize_filename::sanitize(hint)
     } else {
-        headers::extract_filename(&response, &url)
+        fetched_filename
     };
 
     let filepath = target_dir.join(&final_filename);
@@ -88,34 +87,26 @@ pub async fn start_download(
 
     // Strategy Selection
     let is_streaming = format::is_streaming_protocol(&url);
-    let mut final_total_size = total_size;
+    let final_total_size = total_size;
+
+    // If streaming OR if server didn't report size, we MUST use a streaming strategy
+    let use_streaming_engine = is_streaming || final_total_size == 0;
     
-    // If streaming, ensure we have a good extension and set size to 0 (unknown)
     if is_streaming {
         let ext = format::get_output_container(&url);
         let path = std::path::Path::new(&filepath_str);
         let new_path = path.with_extension(ext);
         filepath_str = new_path.to_string_lossy().to_string();
-        final_total_size = 0; // HLS handles dynamic streams
-    }
-
-    if !is_streaming && final_total_size < 1 {
-        // Warning log, but maybe proceed?
-        // For sparse file allocation we NEED size.
-        // MVP3 decision: Fail if no size, as per existing logic.
-        return Err(DownloadError::Config(
-            "File has no size! Server did not report Content-Length.".to_string(),
-        ));
     }
 
     // CRITICAL: Tell Frontend the size AND download ID immediately
     let _ = app.emit("download-start", final_total_size);
     let _ = app.emit("download-id", download_id.clone());
 
-    tracing::info!(download_id = %download_id, filename = %final_filename, is_streaming = is_streaming, "Starting download");
+    tracing::info!(download_id = %download_id, filename = %final_filename, use_streaming_engine = use_streaming_engine, size = final_total_size, "Starting download");
 
-    // 2. Allocator (Skip for streaming as downloader handles its own output)
-    if !is_streaming {
+    // 2. Allocator (Skip for streaming OR unknown size as we can't pre-allocate)
+    if !use_streaming_engine {
         filesystem::allocate_sparse_file(std::path::Path::new(&filepath_str), final_total_size)?;
     }
 
@@ -126,8 +117,8 @@ pub async fn start_download(
         types::DEFAULT_THREADS
     } as u32;
     
-    let chunk_size = if is_streaming { 0 } else { filesystem::calculate_chunk_size(final_total_size) };
-    let total_chunks = if is_streaming { 0 } else { (final_total_size + chunk_size - 1) / chunk_size };
+    let chunk_size = if use_streaming_engine { 0 } else { filesystem::calculate_chunk_size(final_total_size) };
+    let total_chunks = if use_streaming_engine { 0 } else { (final_total_size + chunk_size - 1) / chunk_size };
 
     let metadata = state::DownloadMetadata {
         url: url.clone(),
@@ -139,7 +130,7 @@ pub async fn start_download(
         referrer,
         thread_count: actual_threads,
         completed_chunks: vec![],
-        incomplete_chunks: if is_streaming { vec![] } else { (0..total_chunks).collect() },
+        incomplete_chunks: if use_streaming_engine { vec![] } else { (0..total_chunks).collect() },
         created_at: chrono::Utc::now(),
         paused_at: None,
         resumed_at: None,
@@ -157,7 +148,7 @@ pub async fn start_download(
         .await;
 
     // 4. Run Loop (Delegated to Engine)
-    let strategy: Box<dyn DownloadStrategy> = if is_streaming || url.contains("youtube.com") || url.contains("youtu.be") {
+    let strategy: Box<dyn DownloadStrategy> = if use_streaming_engine || url.contains("youtube.com") || url.contains("youtu.be") {
         Box::new(UniversalStreamingStrategy::new(None))
     } else {
         Box::new(HttpStrategy)
@@ -220,6 +211,10 @@ pub async fn fetch_file_details_with_headers(
     }
 
     let response = response.map_err(|e| DownloadError::Network(e.to_string()))?;
+    
+    if !response.status().is_success() {
+        return Err(DownloadError::Network(format!("Server returned error: {}", response.status())));
+    }
     
     let mut size = 0;
     if let Some(range_header) = response.headers().get("content-range") {
@@ -326,6 +321,7 @@ pub fn run() {
             commands::download_control::resume_download,
             commands::download_control::stop_download,
             commands::download_control::cancel_download,
+            commands::download_control::remove_from_list,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
